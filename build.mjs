@@ -1,7 +1,7 @@
 /**
  * Build script: ESM → CJS bundle (esbuild) → standalone .exe (pkg)
  *
- * Output: dist/discord-lyrics-status.exe
+ * Output: dist/AngelLyrics.exe
  * Users only need to double-click the .exe — no Node.js required.
  */
 
@@ -26,8 +26,8 @@ console.log('   ✓ dist/bundle.cjs');
 
 console.log('📦 Packaging with pkg…');
 execSync(
-  'npx pkg dist/bundle.cjs --targets node18-win-x64 --output dist/discord-lyrics-status.exe',
+  'npx pkg dist/bundle.cjs --targets node18-win-x64 --output dist/AngelLyrics.exe',
   { stdio: 'inherit' }
 );
-console.log('   ✓ dist/discord-lyrics-status.exe');
-console.log('\n✅ Build hoàn tất! Chạy: dist\\discord-lyrics-status.exe');
+console.log('   ✓ dist/AngelLyrics.exe');
+console.log('\n✅ Build hoàn tất! Chạy: dist\\AngelLyrics.exe');

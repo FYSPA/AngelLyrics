@@ -4,11 +4,11 @@
   "description": "Real-time Spotify lyrics displayed as your Discord custom status",
   "type": "module",
   "main": "src/index.js",
-  "author": "Shiin2ii",
+  "author": "FYSPA",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Shiin2ii/discord-status-spotify.git"
+    "url": "https://github.com/FYSPA/AngelLyrics.git"
   },
   "scripts": {
     "start": "node src/index.js",

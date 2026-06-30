@@ -1,106 +1,106 @@
 <div align="center">
 
-# 🎵 Discord Lyrics Status
+# 🎵 AngelLyrics
 
-**Hiển thị lyrics Spotify theo thời gian thực lên Discord custom status của bạn.**
+**Muestra las letras de Spotify en tiempo real en tu estado personalizado de Discord.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey.svg)]()
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-green.svg)]()
 
-**Ngôn ngữ:** [English](README.md) · Tiếng Việt
+**Idioma:** [English](README.md) · Español
 
-[Tải về](#-tải-về) · [Cách hoạt động](#️-cách-hoạt-động) · [Chạy từ source](#️-chạy-từ-source) · [Build](#-build-exe)
+[Descargar](#-descargar) · [Cómo funciona](#️-cómo-funciona) · [Ejecutar desde código](#️-ejecutar-desde-código) · [Compilar](#-compilar-exe)
 
 </div>
 
 ---
 
-## Giới thiệu
+## Introducción
 
-Discord Lyrics Status đọc thông tin bài đang phát từ Spotify — qua **D-Bus/MPRIS trên Linux** hoặc **SMTC trên Windows** — tự động tìm và tải lyrics có timestamp từ [LRCLIB](https://lrclib.net), rồi cập nhật Discord custom status từng dòng — đúng thời điểm với nhạc.
+AngelLyrics lee la canción que estás reproduciendo en Spotify — mediante **D-Bus/MPRIS en Linux** o **SMTC en Windows** — busca y descarga letras sincronizadas con timestamp desde [LRCLIB](https://lrclib.net), y actualiza tu estado personalizado de Discord línea por línea — justo al ritmo de la música.
 
-Không cần Spotify API. Không cần Spotify Premium. Chỉ cần Discord User Token là xài được.
-
----
-
-## ✨ Tính năng
-
-- **Lyrics realtime** — mỗi dòng hiện đúng thời điểm theo file LRC
-- **Không cần cấu hình** — lần đầu chạy tự mở trình duyệt để nhập token
-- **Không bỏ sót dòng nào** — dùng queue tuần tự, tự retry khi bị rate limit
-- **Không cần cài thêm gì** — phân phối dưới dạng file `.exe` standalone
-- **Lyrics miễn phí** — [LRCLIB](https://lrclib.net), không cần API key
-- **Không cần Spotify API** — đọc playback qua D-Bus/MPRIS (Linux) hoặc SMTC (Windows), dùng được với tài khoản free
+Sin API de Spotify. Sin Spotify Premium. Solo necesitas un Discord User Token.
 
 ---
 
-## 📥 Tải về
+## ✨ Funcionalidades
 
-Vào trang [**Releases**](../../releases) và tải file `discord-lyrics-status.exe`.
-
-> **Windows:** Yêu cầu Windows 10 hoặc 11 (dùng SMTC qua PowerShell).  
-> **Linux:** Yêu cầu D-Bus session bus với MPRIS (dùng `dbus-send`).
-
----
-
-## 🚀 Bắt đầu nhanh
-
-1. **Tải** `discord-lyrics-status.exe` từ trang [Releases](../../releases)
-2. **Chạy** file `.exe` — lần đầu trình duyệt sẽ tự mở
-3. **Nhập Discord User Token** rồi nhấn *Lưu và khởi động*
-4. **Phát nhạc** trên Spotify — lyrics sẽ hiện lên Discord status theo thời gian thực
-
-Token của bạn được lưu cục bộ tại `%APPDATA%\discord-lyrics-status\config.json`, không gửi đi đâu ngoài API của Discord.
+- **Letras en tiempo real** — cada línea aparece en el momento exacto según el archivo LRC
+- **Sin configuración** — al iniciar por primera vez abre un navegador para ingresar tu token
+- **Sin saltos de línea** — usa una cola secuencial que reintenta automáticamente cuando hay rate limit
+- **Sin dependencias extra** — se distribuye como un solo archivo `.exe` standalone
+- **Letras gratuitas** — [LRCLIB](https://lrclib.net), no requiere API key
+- **Sin API de Spotify** — lee la reproducción mediante D-Bus/MPRIS (Linux) o SMTC (Windows), funciona con cuentas gratuitas
 
 ---
 
-## 🔑 Lấy Discord User Token
+## 📥 Descargar
 
-> **Cảnh báo:** User token cho phép truy cập toàn bộ tài khoản Discord của bạn. Không chia sẻ với bất kỳ ai.
+Ve a la página de [**Releases**](../../releases) y descarga `AngelLyrics.exe`.
 
-1. Mở [discord.com/app](https://discord.com/app) trên **trình duyệt** (không phải app desktop)
-2. Nhấn `F12` mở DevTools → vào tab **Network**
-3. Thực hiện bất kỳ thao tác nào (đổi server, gửi tin nhắn...)
-4. Click vào một request bất kỳ → **Request Headers** → tìm header `Authorization`
-5. Copy giá trị đó — đó là user token của bạn
+> **Windows:** Requiere Windows 10 u 11 (usa SMTC mediante PowerShell).  
+> **Linux:** Requiere D-Bus session bus con MPRIS (usa `dbus-send`).
 
 ---
 
-## ⚙️ Cách hoạt động
+## 🚀 Inicio rápido
+
+1. **Descarga** `AngelLyrics.exe` desde [Releases](../../releases)
+2. **Ejecuta** el `.exe` — la primera vez se abrirá el navegador automáticamente
+3. **Ingresa tu Discord User Token** y haz clic en *Guardar e iniciar*
+4. **Reproduce música** en Spotify — las letras aparecerán en tu estado de Discord en tiempo real
+
+Tu token se guarda localmente en `%APPDATA%\AngelLyrics\config.json` y nunca se envía a ningún lado que no sea la API de Discord.
+
+---
+
+## 🔑 Cómo obtener tu Discord User Token
+
+> **Advertencia:** Tu user token otorga acceso completo a tu cuenta de Discord. No lo compartas con nadie.
+
+1. Abre [discord.com/app](https://discord.com/app) en un **navegador** (no en la app de escritorio)
+2. Presiona `F12` para abrir DevTools → ve a la pestaña **Network**
+3. Realiza cualquier acción (cambia de servidor, envía un mensaje, etc.)
+4. Haz clic en cualquier solicitud → **Request Headers** → busca el encabezado `Authorization`
+5. Copia su valor — ese es tu user token
+
+---
+
+## ⚙️ Cómo funciona
 
 ```
-Spotify (desktop / browser)
+Spotify (escritorio / navegador)
       │
-      ├── Linux  → D-Bus / MPRIS
+      ├── Linux   → D-Bus / MPRIS
       └── Windows → SMTC (PowerShell)
       │
-      ▼  tên bài, nghệ sĩ, vị trí phát
-LRCLIB API            ← tải lyrics có timestamp (miễn phí, không cần key)
+      ▼  título, artista, posición de reproducción
+LRCLIB API            ← obtiene letras LRC sincronizadas (gratis, sin key)
       │
       ▼
-LyricScheduler        ← fire từng dòng đúng thời điểm bằng setTimeout
+LyricScheduler        ← dispara cada línea en el timestamp correcto mediante setTimeout
       │
       ▼
-Discord PATCH API     ← cập nhật custom status, queue & retry khi rate limit
+Discord PATCH API     ← actualiza el estado personalizado, con cola y reintento en rate limit
 ```
 
 ---
 
-## 🛠️ Chạy từ source
+## 🛠️ Ejecutar desde código
 
-**Yêu cầu:** Node.js 18+, Spotify desktop app.  
-**Linux:** D-Bus session bus với `dbus-send`.  
-**Windows:** Windows 10/11 với PowerShell.
+**Requisitos:** Node.js 18+, app de Spotify de escritorio.  
+**Linux:** D-Bus session bus con `dbus-send`.  
+**Windows:** Windows 10/11 con PowerShell.
 
 ```bash
-git clone https://github.com/Shiin2ii/discord-status-spotify.git
-cd discord-status-spotify
+git clone https://github.com/FYSPA/AngelLyrics.git
+cd AngelLyrics
 npm install
 npm start
 ```
 
-Hoặc tạo file `.env` để bỏ qua bước setup trên trình duyệt:
+O crea un archivo `.env` para saltar la configuración del navegador:
 
 ```env
 DISCORD_USER_TOKEN=your_discord_user_token_here
@@ -108,53 +108,63 @@ DISCORD_USER_TOKEN=your_discord_user_token_here
 
 ---
 
-## 📦 Build `.exe`
+## 📦 Compilar `.exe`
 
-Tạo file executable standalone với Node.js được bundle bên trong — máy đích không cần cài Node.js.
+Genera un ejecutable standalone con Node.js incluido — no se requiere runtime en la máquina de destino.
 
 ```bash
 npm install
 npm run build
-# Output: dist/discord-lyrics-status.exe
+# Output: dist/AngelLyrics.exe
 ```
 
 ---
 
-## 🗂️ Cấu trúc project
+## 🗂️ Estructura del proyecto
 
 ```
 src/
-├── index.js       — vòng lặp chính, poll & điều phối
-├── spotify.js     — đọc playback (Linux D-Bus/MPRIS hoặc Windows SMTC)
-├── lyrics.js      — fetch & cache lyrics từ LRCLIB
-├── scheduler.js   — fire từng dòng lyrics đúng thời điểm
-├── status.js      — cập nhật Discord custom status (queue + retry)
-├── config.js      — đọc/ghi token từ AppData
-└── setup.js       — UI setup lần đầu trên trình duyệt (Express)
-build.mjs          — build script dùng esbuild + pkg
+├── index.js          — bucle principal, polling y orquestación
+├── spotify.js        — detecta reproducción (Windows SMTC / Linux D-Bus / Spotify API opcional)
+├── lyrics.js         — obtiene y cachea letras sincronizadas desde LRCLIB
+├── scheduler.js      — clase LyricScheduler, dispara líneas en el timestamp exacto
+├── status.js         — actualiza el estado personalizado de Discord (cola + reintento)
+├── config.js         — lee/escribe configuración (token, modo de visualización, etc.)
+├── constants.js      — constantes compartidas (intervalo de polling, umbrales, etc.)
+├── ipc.js            — IPC basado en archivos entre el proceso principal y el bot de control
+├── setup.js          — UI web Express para la primera ejecución (ingreso de token, OAuth Spotify)
+└── bot/
+    ├── constants.js  — constantes del bot de control (colores, nombres de modo, plataforma)
+    ├── pm2.js        — wrapper de pm2 para gestión del proceso (iniciar/detener/reiniciar)
+    ├── ui.js         — constructores de embeds y botones de Discord.js
+    └── live.js       — actualizador del canal "Now Playing" en vivo
+
+control-bot.js        — bot de Discord separado para control remoto por MD
+debug-smtc.ps1        — script de diagnóstico SMTC independiente (Windows)
+build.mjs             — script de compilación con esbuild + pkg
 ```
 
 ---
 
 ## ❓ FAQ
 
-**Có cần Spotify Premium không?**
-Không. App đọc từ D-Bus/MPRIS (Linux) hoặc SMTC (Windows), không dùng Spotify API.
+**¿Se necesita Spotify Premium?**
+No. La app lee desde D-Bus/MPRIS (Linux) o SMTC (Windows), no usa la API de Spotify.
 
-**Có chạy được trên Linux không?**
-Có. Spotify trên Linux hiển thị thông tin phát nhạc qua D-Bus MPRIS, app đọc trực tiếp từ đó.
+**¿Funciona en Linux?**
+Sí. Spotify en Linux expone la reproducción mediante D-Bus MPRIS, la app lo lee directamente.
 
-**Dùng cái này có bị ban Discord không?**
-Dùng user token vi phạm ToS của Discord. Tự chịu trách nhiệm khi sử dụng.
+**¿Pueden banear mi cuenta de Discord por esto?**
+Usar un user token viola los Términos de Servicio de Discord. Úsalo bajo tu propio riesgo.
 
-**Làm sao đổi token?**
-Xóa file `%APPDATA%\discord-lyrics-status\config.json` rồi chạy lại app.
+**¿Cómo cambio mi token?**
+Elimina el archivo `%APPDATA%\AngelLyrics\config.json` y vuelve a ejecutar la app.
 
-**Không thấy lyrics / lyrics sai?**
-LRCLIB có thể chưa có bài đó. App sẽ hiển thị tên bài và nghệ sĩ thay thế.
+**¿No se ven las letras o son incorrectas?**
+Puede que LRCLIB no tenga esa canción. El estado mostrará el nombre de la canción y el artista como alternativa.
 
 ---
 
-## 📄 Giấy phép
+## 📄 Licencia
 
-[MIT](LICENSE) © [Shiin2ii](https://github.com/Shiin2ii)
+[MIT](LICENSE) © [FYSPA](https://github.com/FYSPA)

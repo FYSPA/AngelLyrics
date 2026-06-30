@@ -8,7 +8,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey.svg)]()
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-green.svg)]()
 
-**Language:** English · [Tiếng Việt](README.vi.md)
+**Language:** English · [Español](README.vi.md)
 
 [Download](#-download) · [How it works](#-how-it-works) · [Run from source](#-run-from-source) · [Build](#-build-exe)
 
@@ -37,7 +37,7 @@ No Spotify API key. No Spotify Premium. No setup beyond a single Discord token.
 
 ## 📥 Download
 
-Go to the [**Releases**](../../releases) page and download `discord-lyrics-status.exe`.
+Go to the [**Releases**](../../releases) page and download `AngelLyrics.exe`.
 
 > **Windows:** Requires Windows 10 or 11 (uses SMTC via PowerShell).  
 > **Linux:** Requires D-Bus session bus with MPRIS (uses `dbus-send`).
@@ -46,12 +46,12 @@ Go to the [**Releases**](../../releases) page and download `discord-lyrics-statu
 
 ## 🚀 Quick Start
 
-1. **Download** `discord-lyrics-status.exe` from [Releases](../../releases)
+1. **Download** `AngelLyrics.exe` from [Releases](../../releases)
 2. **Run** the `.exe` — a browser window will open automatically on first launch
 3. **Enter your Discord User Token** and click *Save & Start*
 4. **Play music** on Spotify — lyrics will appear on your Discord status in real time
 
-Your token is stored locally at `%APPDATA%\discord-lyrics-status\config.json` and never sent anywhere other than Discord's own API.
+Your token is stored locally at `%APPDATA%\AngelLyrics\config.json` and never sent anywhere other than Discord's own API.
 
 ---
 
@@ -94,8 +94,8 @@ Discord PATCH API     ← updates custom status, queued & retried on rate limit
 **Windows:** Windows 10/11 with PowerShell.
 
 ```bash
-git clone https://github.com/Shiin2ii/discord-status-spotify.git
-cd discord-status-spotify
+git clone https://github.com/FYSPA/AngelLyrics.git
+cd AngelLyrics
 npm install
 npm start
 ```
@@ -115,7 +115,7 @@ Produces a standalone executable with Node.js bundled inside — no runtime requ
 ```bash
 npm install
 npm run build
-# Output: dist/discord-lyrics-status.exe
+# Output: dist/AngelLyrics.exe
 ```
 
 ---
@@ -124,14 +124,24 @@ npm run build
 
 ```
 src/
-├── index.js       — main loop, poll & orchestration
-├── spotify.js     — reads playback (Linux D-Bus/MPRIS or Windows SMTC)
-├── lyrics.js      — fetches & caches synced lyrics from LRCLIB
-├── scheduler.js   — fires lyric lines at the correct timestamps
-├── status.js      — updates Discord custom status (queue + retry)
-├── config.js      — reads/writes token from AppData
-└── setup.js       — first-run browser setup UI (Express)
-build.mjs          — esbuild + pkg build script
+├── index.js          — main loop, poll & orchestration
+├── spotify.js        — reads playback (Windows SMTC / Linux D-Bus / optional Spotify API)
+├── lyrics.js         — fetches & caches synced lyrics from LRCLIB
+├── scheduler.js      — LyricScheduler class, fires lines at correct timestamps
+├── status.js         — updates Discord custom status (queue + retry)
+├── config.js         — reads/writes config (token, display mode, etc.)
+├── constants.js      — shared constants (poll interval, thresholds, etc.)
+├── ipc.js            — file-based IPC between main process and control bot
+├── setup.js          — first-run Express web UI (token entry, Spotify OAuth)
+└── bot/
+    ├── constants.js  — bot-specific constants (colors, mode names, platform)
+    ├── pm2.js        — pm2 process manager wrapper (start/stop/restart/reset)
+    ├── ui.js         — Discord.js embed & button builders
+    └── live.js       — live "Now Playing" channel updater
+
+control-bot.js        — separate Discord bot for remote control via DM
+debug-smtc.ps1        — standalone SMTC diagnostic script (Windows)
+build.mjs             — esbuild + pkg build script
 ```
 
 ---
@@ -148,7 +158,7 @@ Yes. Spotify on Linux exposes playback via D-Bus MPRIS, which the app reads dire
 Using a user token is against Discord's ToS. Use at your own risk.
 
 **How do I reset my token?**
-Delete `%APPDATA%\discord-lyrics-status\config.json` and relaunch the app.
+Delete `%APPDATA%\AngelLyrics\config.json` and relaunch the app.
 
 **Lyrics are not showing / wrong lyrics?**
 LRCLIB may not have the track. The status will fall back to showing the track name and artist.
@@ -157,5 +167,5 @@ LRCLIB may not have the track. The status will fall back to showing the track na
 
 ## 📄 License
 
-[MIT](LICENSE) © [Shiin2ii](https://github.com/Shiin2ii)
+[MIT](LICENSE) © [FYSPA](https://github.com/FYSPA)
 

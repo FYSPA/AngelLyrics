@@ -4,7 +4,7 @@ import { homedir } from 'os';
 
 export const CONFIG_DIR = join(
   process.env.APPDATA || join(homedir(), '.config'),
-  'discord-lyrics-status'
+  'AngelLyrics'
 );
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
