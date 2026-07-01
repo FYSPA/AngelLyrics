@@ -44,6 +44,7 @@ export class LyricScheduler {
    */
   start(progressMs) {
     this.stop();
+    console.log(`[Planificador] Iniciando en ${(progressMs / 1000).toFixed(1)}s`);
 
     this.#startedAt = Date.now();
     this.#startProgressMs = progressMs;

@@ -22,6 +22,7 @@ let scheduler = null;
 let lastProgressMs = 0;
 let lastPollTime = 0;
 let displayMode = getDisplayMode();
+let _polling = false;
 
 // ── Aplicar filtros a una línea de texto ────────────────────────────────────
 
@@ -204,6 +205,8 @@ function applyDisplayMode(newMode) {
 // ── Bucle de polling ─────────────────────────────────────────────────────────
 
 async function poll() {
+  if (_polling) return;
+  _polling = true;
   try {
     refreshConfig();
     const trackFetchedAt = Date.now();
@@ -280,13 +283,18 @@ async function poll() {
       } else if (displayMode === 'compact') {
         showCompact();
       } else {
+        lastProgressMs = track.progressMs;
+        showProgress();
+
         const lyrics = await getLyrics(track.trackId, track.trackName, track.artistName, track.albumName, track.durationMs);
 
         if (lyrics && lyrics.length > 0) {
+          const freshTrack = await getCurrentTrack();
+          const adjustedMs = freshTrack ? freshTrack.progressMs : (track.progressMs + (Date.now() - trackFetchedAt));
           scheduler = new LyricScheduler(lyrics, onLineChange);
-          scheduler.start(track.progressMs + (Date.now() - trackFetchedAt));
+          scheduler.start(adjustedMs);
         } else {
-          lastProgressMs = track.progressMs;
+          lastProgressMs = track.progressMs + (Date.now() - trackFetchedAt);
           showProgress();
         }
       }
@@ -296,7 +304,8 @@ async function poll() {
 
     // ── Detección de salto (misma canción) ───────────────────────────────────
     else if (scheduler && displayMode === 'lyrics' && lastPollTime > 0) {
-      const elapsed = now - lastPollTime;
+      const nowMs = Date.now();
+      const elapsed = nowMs - lastPollTime;
       const expectedProgress = lastProgressMs + elapsed;
       const drift = Math.abs(track.progressMs - expectedProgress);
 
@@ -304,7 +313,9 @@ async function poll() {
         console.log(
           `[Principal] Salto detectado (desfase ${(drift / 1000).toFixed(1)}s). Resincronizando letras.`
         );
-        scheduler.restart(track.progressMs + (Date.now() - trackFetchedAt));
+        const freshTrack = await getCurrentTrack();
+        const restartMs = freshTrack ? freshTrack.progressMs : (track.progressMs + (nowMs - trackFetchedAt));
+        scheduler.restart(restartMs);
         saveNowplaying();
       }
     }
@@ -320,10 +331,12 @@ async function poll() {
       }
     }
 
-    lastProgressMs = track.progressMs;
-    lastPollTime = now;
+    lastProgressMs = scheduler ? scheduler.estimatedProgressMs : track.progressMs;
+    lastPollTime = Date.now();
   } catch (err) {
     console.error('[Principal] Error en polling:', err.message);
+  } finally {
+    _polling = false;
   }
 }
 
