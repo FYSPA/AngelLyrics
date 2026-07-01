@@ -237,103 +237,63 @@ async function getCurrentTrackLinux() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// WINDOWS — SMTC via PowerShell
+// ════════════════════════════════════════════════════════════════════════════
+// WINDOWS — SMTC via PowerShell (one-shot por ciclo)
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── Persistent SMTC process ─────────────────────────────────────────────────
-// Instead of spawning powershell every 1.5s, keep one long-lived process
-// that outputs JSON on each loop iteration.
-
-const PERSISTENT_SMTC_SCRIPT = `
+const SMTC_SCRIPT = `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' })[0]
 function Await($Op, $T) { $sp = $asTask.MakeGenericMethod($T); $t = $sp.Invoke($null, @($Op)); $t.Wait(-1) | Out-Null; $t.Result }
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
-while ($true) {
-  try {
-    $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-    $sessions = $mgr.GetSessions()
-    $result = $null
-    foreach ($s in $sessions) {
-      $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
-      if (-not $props.Title) { continue }
-      $pb = $s.GetPlaybackInfo()
-      $tl = $s.GetTimelineProperties()
-      $result = @{
-        playbackStatus = "$($pb.PlaybackStatus)"
-        sourceApp = "$($s.SourceAppUserModelId)"
-        title    = "$($props.Title)"
-        artist   = "$($props.Artist)"
-        album    = "$($props.AlbumTitle)"
-        positionMs = [math]::Round($tl.Position.TotalMilliseconds)
-        durationMs = [math]::Round($tl.EndTime.TotalMilliseconds)
-      }
-      break
+try {
+  $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+  $sessions = $mgr.GetSessions()
+  $result = $null
+  foreach ($s in $sessions) {
+    $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+    if (-not $props.Title) { continue }
+    $pb = $s.GetPlaybackInfo()
+    $tl = $s.GetTimelineProperties()
+    $result = @{
+      playbackStatus = "$($pb.PlaybackStatus)"
+      sourceApp = "$($s.SourceAppUserModelId)"
+      title    = "$($props.Title)"
+      artist   = "$($props.Artist)"
+      album    = "$($props.AlbumTitle)"
+      positionMs = [math]::Round($tl.Position.TotalMilliseconds)
+      durationMs = [math]::Round($tl.EndTime.TotalMilliseconds)
     }
-    if ($result) { ConvertTo-Json $result -Depth 5 -Compress } else { Write-Output 'null' }
-  } catch { Write-Output 'null' }
-  Start-Sleep -Milliseconds 1500
-}
+    break
+  }
+  if ($result) { ConvertTo-Json $result -Depth 5 -Compress } else { Write-Output 'null' }
+} catch { Write-Output 'null' }
 `;
 
-/** @type {import('child_process').ChildProcess|null} */
-let _smtcProcess = null;
-/** @type {object|null} */
-let _latestSmtcData = null;
-/** @type {string} */
-let _smtcBuffer = '';
-let _smtcShuttingDown = false;
-
-function startPersistentSmtc() {
-  if (_smtcProcess) return;
-  _smtcProcess = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', PERSISTENT_SMTC_SCRIPT]);
-  _smtcBuffer = '';
-  _smtcProcess.stdout.setEncoding('utf8');
-  _smtcProcess.stdout.on('data', (chunk) => {
-    _smtcBuffer += chunk;
-    const lines = _smtcBuffer.split('\n');
-    for (let i = 0; i < lines.length - 1; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      try { _latestSmtcData = JSON.parse(line); } catch {}
-    }
-    _smtcBuffer = lines[lines.length - 1];
-  });
-  _smtcProcess.on('exit', () => {
-    _smtcProcess = null;
-    _latestSmtcData = null;
-    if (!_smtcShuttingDown) setTimeout(startPersistentSmtc, 2000);
-  });
-  _smtcProcess.on('error', () => {
-    _smtcProcess = null;
-  });
-}
-
-export function cleanupSmtc() {
-  _smtcShuttingDown = true;
-  if (_smtcProcess) {
-    _smtcProcess.kill();
-    _smtcProcess = null;
+async function getCurrentTrackWindows() {
+  const raw = await runCommand('powershell', ['-NoProfile', '-NonInteractive', '-Command', SMTC_SCRIPT]);
+  if (!raw) return null;
+  const lines = raw.trim().split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const data = JSON.parse(trimmed);
+      if (!data || data === 'null' || !data.title) return null;
+      const trackId = makeTrackId(data.title, data.artist);
+      return {
+        isPlaying: data.playbackStatus === 'Playing',
+        trackId,
+        trackName: data.title,
+        artistName: data.artist,
+        albumName: data.album || '',
+        progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
+        durationMs: data.durationMs || 0,
+        albumArtUrl: '',
+      };
+    } catch {}
   }
-  _latestSmtcData = null;
-}
-
-function getCurrentTrackWindows() {
-  if (!_smtcProcess) startPersistentSmtc();
-  const data = _latestSmtcData;
-  if (!data || data === 'null' || !data.title) return Promise.resolve(null);
-
-  const trackId = makeTrackId(data.title, data.artist);
-  return Promise.resolve({
-    isPlaying: data.playbackStatus === 'Playing',
-    trackId,
-    trackName: data.title,
-    artistName: data.artist,
-    albumName: data.album || '',
-    progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
-    durationMs: data.durationMs || 0,
-    albumArtUrl: '',
-  });
+  return null;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
