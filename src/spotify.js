@@ -246,7 +246,7 @@ async function getCurrentTrackLinux() {
 
 const PERSISTENT_SMTC_SCRIPT = `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\\\`1' })[0]
+$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' })[0]
 function Await($Op, $T) { $sp = $asTask.MakeGenericMethod($T); $t = $sp.Invoke($null, @($Op)); $t.Wait(-1) | Out-Null; $t.Result }
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
 while ($true) {
@@ -282,6 +282,7 @@ let _smtcProcess = null;
 let _latestSmtcData = null;
 /** @type {string} */
 let _smtcBuffer = '';
+let _smtcShuttingDown = false;
 
 function startPersistentSmtc() {
   if (_smtcProcess) return;
@@ -301,17 +302,26 @@ function startPersistentSmtc() {
   _smtcProcess.on('exit', () => {
     _smtcProcess = null;
     _latestSmtcData = null;
-    setTimeout(startPersistentSmtc, 2000);
+    if (!_smtcShuttingDown) setTimeout(startPersistentSmtc, 2000);
   });
   _smtcProcess.on('error', () => {
     _smtcProcess = null;
   });
 }
 
+export function cleanupSmtc() {
+  _smtcShuttingDown = true;
+  if (_smtcProcess) {
+    _smtcProcess.kill();
+    _smtcProcess = null;
+  }
+  _latestSmtcData = null;
+}
+
 function getCurrentTrackWindows() {
   if (!_smtcProcess) startPersistentSmtc();
   const data = _latestSmtcData;
-  if (!data || data === 'null' || !data || !data.title) return Promise.resolve(null);
+  if (!data || data === 'null' || !data.title) return Promise.resolve(null);
 
   const trackId = makeTrackId(data.title, data.artist);
   return Promise.resolve({

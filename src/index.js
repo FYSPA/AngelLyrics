@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { getCurrentTrack } from './spotify.js';
+import { getCurrentTrack, cleanupSmtc } from './spotify.js';
 import { getLyrics } from './lyrics.js';
 import { setCustomStatus, clearCustomStatus, onUnauthorized } from './status.js';
 import { LyricScheduler } from './scheduler.js';
@@ -375,6 +375,7 @@ async function main() {
 process.on('SIGINT', async () => {
   console.log('\n[Principal] Cerrando…');
   if (scheduler) scheduler.stop();
+  cleanupSmtc();
   clearCustomStatus();
   process.exit(0);
 });
