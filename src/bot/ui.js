@@ -1,10 +1,10 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
 import { COLORS, MODE_NAMES, VALID_MODES, SO_ACTUAL } from './constants.js';
-import { getDisplayMode, setDisplayMode } from '../config.js';
+import { getDisplayMode, getBackend } from '../config.js';
 import { LIVE_UPDATE_INTERVAL_MS } from '../constants.js';
 
 export function modoDescription(mode) {
-  const map = { lyrics: 'Letra sincronizada línea por línea', info: 'Solo nombre de canción y artista', progress: 'Barra de progreso con porcentaje' };
+  const map = { lyrics: 'Letra sincronizada línea por línea', info: 'Solo nombre de canción y artista', progress: 'Barra de progreso con tiempo', compact: 'Barra + tiempo + nombre de canción' };
   return map[mode] || '';
 }
 
@@ -23,6 +23,7 @@ export function modeRow() {
     new ButtonBuilder().setCustomId('cmd_mode_lyrics').setLabel('Letras').setStyle(current === 'lyrics' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🎵'),
     new ButtonBuilder().setCustomId('cmd_mode_info').setLabel('Info').setStyle(current === 'info' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('ℹ️'),
     new ButtonBuilder().setCustomId('cmd_mode_progress').setLabel('Progreso').setStyle(current === 'progress' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('📈'),
+    new ButtonBuilder().setCustomId('cmd_mode_compact').setLabel('Compacto').setStyle(current === 'compact' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('📱'),
   );
 }
 
@@ -35,7 +36,8 @@ export function buildModeEmbed(mode) {
       { name: '📋 Modos disponibles', value:
         '▸ `lyrics` — Letra sincronizada línea por línea\n' +
         '▸ `info` — Solo nombre de canción y artista\n' +
-        '▸ `progress` — Barra de progreso con porcentaje' },
+        '▸ `progress` — Barra de progreso con tiempo\n' +
+        '▸ `compact` — Barra + tiempo + nombre de canción' },
     )
     .setFooter({ text: 'Usa !mode <modo> o los botones de abajo' });
 }
@@ -118,7 +120,7 @@ export function nowplayingEmbed(np) {
   const filled = Math.round((pct / 100) * barWidth);
   const bar = '▰'.repeat(filled) + '▱'.repeat(barWidth - filled);
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(COLORS.SPOTIFY_GREEN)
     .setTitle('🎵 Now Playing')
     .setDescription(`**${np.trackName}** — ${np.artistName}`)
@@ -129,6 +131,12 @@ export function nowplayingEmbed(np) {
     )
     .setTimestamp()
     .setFooter({ text: 'Discord Lyrics Status' });
+
+  if (np.albumArtUrl) {
+    embed.setThumbnail(np.albumArtUrl);
+  }
+
+  return embed;
 }
 
 export function liveChannelEmbed(channelMention) {
@@ -170,6 +178,7 @@ export function statusEmbed(proc) {
       .setDescription('⚪ El proceso no está registrado en pm2 todavía.')
       .addFields(
         { name: '💻 Plataforma', value: SO_ACTUAL, inline: true },
+        { name: '🎛️ Backend', value: `**${getBackend()}**`, inline: true },
         { name: '🎯 Modo', value: `**${MODE_NAMES[getDisplayMode()]}**`, inline: true },
       )
       .setTimestamp()
@@ -185,7 +194,8 @@ export function statusEmbed(proc) {
     .setTitle('📊 Estado del sistema')
     .addFields(
       { name: `${emoji} Estado`, value: `**${proc.pm2_env.status}**`, inline: true },
-      { name: '💻 Plataforma', value: SO_ACTUAL, inline: true },
+      { name: '💻 SO', value: SO_ACTUAL, inline: true },
+      { name: '🎛️ Backend', value: `**${getBackend()}**`, inline: true },
       { name: '🎯 Modo', value: `**${MODE_NAMES[getDisplayMode()]}**`, inline: true },
       { name: '🆔 PM2 ID', value: `\`${proc.pm_id}\``, inline: true },
       { name: '⏱ Tiempo activo', value: proc.pm2_env.created_at ? `<t:${Math.floor(proc.pm2_env.created_at / 1000)}:R>` : 'Desconocido', inline: true },
@@ -209,9 +219,19 @@ export function helpEmbed() {
       { name: '📊 Información', value:
         '`!status` — Estado del sistema\n' +
         '`!np` — Canción actual\n' +
+        '`!logs` — Últimos logs del proceso\n' +
+        '`!repeat` — Repetir última canción\n' +
         '`!ping` — Latencia del bot', inline: true },
       { name: '⚙️ Configuración', value:
         '`!mode` — Ver/cambiar modo\n' +
+        '`!backend` — Ver/cambiar backend\n' +
+        '`!prefix` — Texto antes de la letra\n' +
+        '`!emoji` — Emoji del status\n' +
+        '`!style` — Estilo de barra de progreso\n' +
+        '`!cooldown` — Intervalo de actualización\n' +
+        '`!filter` — Palabras prohibidas\n' +
+        '`!blacklist` — Ignorar artistas/canciones\n' +
+        '`!broadcast` — Enviar letra a webhook\n' +
         '`!np channel #canal` — Live channel\n' +
         '`!help` — Mostrar esta ayuda', inline: true },
     )
@@ -219,7 +239,8 @@ export function helpEmbed() {
       { name: '🎯 Modos de visualización', value:
         '▸ `lyrics` — Letra sincronizada\n' +
         '▸ `info` — Info de canción\n' +
-        '▸ `progress` — Barra de progreso' },
+        '▸ `progress` — Barra de progreso\n' +
+        '▸ `compact` — Barra + tiempo + canción' },
     )
     .setFooter({ text: `SO: ${SO_ACTUAL}` })
     .setTimestamp();

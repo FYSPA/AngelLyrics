@@ -1,4 +1,5 @@
 import { getToken, clearToken } from './config.js';
+import { platform, release } from 'os';
 
 const API = 'https://discord.com/api/v9/users/@me/settings';
 
@@ -27,20 +28,24 @@ const queue = [];
 /** @type {boolean} */
 let processing = false;
 
+const OS_NAME = platform() === 'win32' ? 'Windows' : platform() === 'linux' ? 'Linux' : platform();
+const OS_VERSION = release();
+const BUILD_NUM = Math.floor(Math.random() * (350000 - 200000) + 200000);
+const USER_AGENT = `Mozilla/5.0 (${OS_NAME} ${OS_VERSION}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`;
 const SUPER_PROPERTIES = Buffer.from(JSON.stringify({
-  os: 'Windows',
+  os: OS_NAME,
   browser: 'Chrome',
   device: '',
   system_locale: 'en-US',
-  browser_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  browser_user_agent: USER_AGENT,
   browser_version: '124.0.0.0',
-  os_version: '10',
+  os_version: OS_VERSION,
   referrer: '',
   referring_domain: '',
   referrer_current: '',
   referring_domain_current: '',
   release_channel: 'stable',
-  client_build_number: 9999,
+  client_build_number: BUILD_NUM,
   client_event_source: null,
 })).toString('base64');
 
@@ -60,7 +65,7 @@ async function processQueue() {
         headers: {
           Authorization: entry.token,
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'User-Agent': USER_AGENT,
           'X-Super-Properties': SUPER_PROPERTIES,
           'X-Discord-Locale': 'en-US',
           'Origin': 'https://discord.com',

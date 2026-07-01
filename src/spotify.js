@@ -10,7 +10,7 @@
 import { spawn } from 'child_process';
 import { platform } from 'os';
 import { POSITION_CLEANUP_MS } from './constants.js';
-import { getSpotifyRefreshToken, saveSpotifyTokens, clearSpotifyTokens } from './config.js';
+import { getSpotifyRefreshToken, saveSpotifyTokens, clearSpotifyTokens, getBackend } from './config.js';
 
 const IS_LINUX = platform() === 'linux';
 const IS_WINDOWS = platform() === 'win32';
@@ -210,21 +210,15 @@ function parseDbusOutput(raw) {
   };
 }
 
-function isSpotifyService(name, data) {
-  return name.includes('spotify') || (data.url && data.url.includes('open.spotify.com'));
-}
-
 async function getCurrentTrackLinux() {
   const services = await listDbusServices();
   if (services.length === 0) return null;
-
-  services.sort((a, b) => (a.includes('spotify') ? 0 : 1) - (b.includes('spotify') ? 0 : 1));
 
   for (const name of services) {
     const raw = await getPlayerProperties(name);
     if (!raw) continue;
     const data = parseDbusOutput(raw);
-    if (!data.title || !isSpotifyService(name, data)) continue;
+    if (!data.title) continue;
 
     const trackId = makeTrackId(data.title, data.artist);
     return {
@@ -246,58 +240,90 @@ async function getCurrentTrackLinux() {
 // WINDOWS — SMTC via PowerShell
 // ════════════════════════════════════════════════════════════════════════════
 
-const SMTC_SCRIPT = `
+// ── Persistent SMTC process ─────────────────────────────────────────────────
+// Instead of spawning powershell every 1.5s, keep one long-lived process
+// that outputs JSON on each loop iteration.
+
+const PERSISTENT_SMTC_SCRIPT = `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\\\`1' })[0]
 function Await($Op, $T) { $sp = $asTask.MakeGenericMethod($T); $t = $sp.Invoke($null, @($Op)); $t.Wait(-1) | Out-Null; $t.Result }
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
-$mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-$sessions = $mgr.GetSessions()
-foreach ($s in $sessions) {
-  $app = $s.SourceAppUserModelId
-  if ($app -notlike '*Spotify*') { continue }
-  $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
-  $pb = $s.GetPlaybackInfo()
-  $tl = $s.GetTimelineProperties()
-  $r = @{
-    playbackStatus = "$($pb.PlaybackStatus)"
-    title    = "$($props.Title)"
-    artist   = "$($props.Artist)"
-    album    = "$($props.AlbumTitle)"
-    positionMs = [math]::Round($tl.Position.TotalMilliseconds)
-    durationMs = [math]::Round($tl.EndTime.TotalMilliseconds)
-  }
-  ConvertTo-Json $r -Depth 5 -Compress
-  exit 0
+while ($true) {
+  try {
+    $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+    $sessions = $mgr.GetSessions()
+    $result = $null
+    foreach ($s in $sessions) {
+      $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+      if (-not $props.Title) { continue }
+      $pb = $s.GetPlaybackInfo()
+      $tl = $s.GetTimelineProperties()
+      $result = @{
+        playbackStatus = "$($pb.PlaybackStatus)"
+        sourceApp = "$($s.SourceAppUserModelId)"
+        title    = "$($props.Title)"
+        artist   = "$($props.Artist)"
+        album    = "$($props.AlbumTitle)"
+        positionMs = [math]::Round($tl.Position.TotalMilliseconds)
+        durationMs = [math]::Round($tl.EndTime.TotalMilliseconds)
+      }
+      break
+    }
+    if ($result) { ConvertTo-Json $result -Depth 5 -Compress } else { Write-Output 'null' }
+  } catch { Write-Output 'null' }
+  Start-Sleep -Milliseconds 1500
 }
-Write-Output 'null'
 `;
 
-async function getCurrentTrackWindows() {
-  const raw = await runCommand('powershell', [
-    '-NoProfile', '-NonInteractive', '-Command', SMTC_SCRIPT,
-  ]);
+/** @type {import('child_process').ChildProcess|null} */
+let _smtcProcess = null;
+/** @type {object|null} */
+let _latestSmtcData = null;
+/** @type {string} */
+let _smtcBuffer = '';
 
-  if (!raw || raw.trim() === 'null') return null;
+function startPersistentSmtc() {
+  if (_smtcProcess) return;
+  _smtcProcess = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', PERSISTENT_SMTC_SCRIPT]);
+  _smtcBuffer = '';
+  _smtcProcess.stdout.setEncoding('utf8');
+  _smtcProcess.stdout.on('data', (chunk) => {
+    _smtcBuffer += chunk;
+    const lines = _smtcBuffer.split('\n');
+    for (let i = 0; i < lines.length - 1; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try { _latestSmtcData = JSON.parse(line); } catch {}
+    }
+    _smtcBuffer = lines[lines.length - 1];
+  });
+  _smtcProcess.on('exit', () => {
+    _smtcProcess = null;
+    _latestSmtcData = null;
+    setTimeout(startPersistentSmtc, 2000);
+  });
+  _smtcProcess.on('error', () => {
+    _smtcProcess = null;
+  });
+}
 
-  try {
-    const data = JSON.parse(raw.trim());
-    if (!data || !data.title) return null;
+function getCurrentTrackWindows() {
+  if (!_smtcProcess) startPersistentSmtc();
+  const data = _latestSmtcData;
+  if (!data || data === 'null' || !data || !data.title) return Promise.resolve(null);
 
-    const trackId = makeTrackId(data.title, data.artist);
-    return {
-      isPlaying: data.playbackStatus === 'Playing',
-      trackId,
-      trackName: data.title,
-      artistName: data.artist,
-      albumName: data.album || '',
-      progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
-      durationMs: data.durationMs || 0,
-      albumArtUrl: '',
-    };
-  } catch {
-    return null;
-  }
+  const trackId = makeTrackId(data.title, data.artist);
+  return Promise.resolve({
+    isPlaying: data.playbackStatus === 'Playing',
+    trackId,
+    trackName: data.title,
+    artistName: data.artist,
+    albumName: data.album || '',
+    progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
+    durationMs: data.durationMs || 0,
+    albumArtUrl: '',
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -307,21 +333,24 @@ async function getCurrentTrackWindows() {
 /**
  * Intenta primero la API de Spotify (si configurada), luego cae al método
  * gratuito según la plataforma (D-Bus en Linux, SMTC en Windows).
+ * Respeta la configuración de backend guardada por el control bot.
  * @returns {Promise<TrackInfo|null>}
  */
 export async function getCurrentTrack() {
-  // Intentar API oficial primero (solo si hay credenciales)
-  if (SPOTIFY_USE_API) {
+  const backend = getBackend();
+
+  if (backend === 'api' || (backend === 'auto' && SPOTIFY_USE_API)) {
     try {
       const result = await getCurrentTrackSpotify();
       if (result !== null) return result;
     } catch (err) {
       console.warn(`[Spotify] API falló: ${err.message} — usando método gratuito.`);
-      _spotifyAccessToken = null; // fuerza re-intento en próximo ciclo
+      _spotifyAccessToken = null;
     }
   }
 
-  // Fallback al método gratuito según plataforma
+  if (backend === 'api') return null;
+
   if (IS_LINUX) {
     try {
       return await getCurrentTrackLinux();

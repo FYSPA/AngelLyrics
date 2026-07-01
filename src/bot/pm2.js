@@ -55,3 +55,12 @@ export async function getPm2Status() {
     return null;
   }
 }
+
+export async function getPm2Logs(lines = 30) {
+  try {
+    const { stdout } = await execAsync(`pm2 logs ${PM2_NAME} --nostream --lines ${lines} --raw`);
+    return stdout || 'No hay logs disponibles.';
+  } catch {
+    return 'No hay logs disponibles.';
+  }
+}

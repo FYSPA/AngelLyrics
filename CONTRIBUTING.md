@@ -33,7 +33,6 @@ src/
 ├── status.js         — updates Discord custom status (queue + retry)
 ├── config.js         — reads/writes config (token, display mode, etc.)
 ├── constants.js      — shared constants (poll interval, thresholds, etc.)
-├── ipc.js            — file-based IPC between main process and control bot
 ├── setup.js          — first-run Express web UI (token entry, Spotify OAuth)
 └── bot/
     ├── constants.js  — bot-specific constants (colors, mode names, platform)

@@ -131,7 +131,6 @@ src/
 ├── status.js         — actualiza el estado personalizado de Discord (cola + reintento)
 ├── config.js         — lee/escribe configuración (token, modo de visualización, etc.)
 ├── constants.js      — constantes compartidas (intervalo de polling, umbrales, etc.)
-├── ipc.js            — IPC basado en archivos entre el proceso principal y el bot de control
 ├── setup.js          — UI web Express para la primera ejecución (ingreso de token, OAuth Spotify)
 └── bot/
     ├── constants.js  — constantes del bot de control (colores, nombres de modo, plataforma)

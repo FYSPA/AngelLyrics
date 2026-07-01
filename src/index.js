@@ -5,9 +5,9 @@ import { getCurrentTrack } from './spotify.js';
 import { getLyrics } from './lyrics.js';
 import { setCustomStatus, clearCustomStatus, onUnauthorized } from './status.js';
 import { LyricScheduler } from './scheduler.js';
-import { getToken, clearToken, getDisplayMode, setDisplayMode, CONFIG_DIR } from './config.js';
+import { getToken, clearToken, getDisplayMode, setDisplayMode, getPrefix, getStatusEmoji, getFilteredWords, getCooldownMs, getBlacklist, getProgressStyle, getBroadcastWebhook, clearBroadcastWebhook, refreshConfig, CONFIG_DIR } from './config.js';
 import { runSetup } from './setup.js';
-import { POLL_INTERVAL_MS, SEEK_THRESHOLD_MS, LYRIC_MIN_LENGTH } from './constants.js';
+import { SEEK_THRESHOLD_MS, LYRIC_MIN_LENGTH } from './constants.js';
 
 const NOWPLAYING_FILE = join(CONFIG_DIR, 'nowplaying.json');
 
@@ -23,29 +23,87 @@ let lastProgressMs = 0;
 let lastPollTime = 0;
 let displayMode = getDisplayMode();
 
+// ── Aplicar filtros a una línea de texto ────────────────────────────────────
+
+function applyFilters(text) {
+  const words = getFilteredWords();
+  if (!words.length) return text;
+  let filtered = text;
+  for (const word of words) {
+    const re = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    filtered = filtered.replace(re, '***');
+  }
+  return filtered;
+}
+
+// ── Broadcast a webhook ──────────────────────────────────────────────────────
+
+let lastBroadcastLine = '';
+
+async function broadcastLine(text) {
+  const webhook = getBroadcastWebhook();
+  if (!webhook || text === lastBroadcastLine) return;
+  lastBroadcastLine = text;
+  try {
+    await fetch(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text }),
+    });
+  } catch {}
+}
+
 // ── Cambio de línea de letra ──────────────────────────────────────────────────
 
 async function onLineChange(line) {
   if (displayMode !== 'lyrics') return;
 
   const rawText = line.text?.trim() || '';
-  const text = rawText.length >= LYRIC_MIN_LENGTH ? rawText : (rawText + ' ♪').trim().padEnd(LYRIC_MIN_LENGTH, '♪');
+  const prefix = getPrefix();
+  const emoji = getStatusEmoji();
+  const cleanText = applyFilters(rawText);
+  const text = cleanText.length >= LYRIC_MIN_LENGTH ? cleanText : (cleanText + ' ♪').trim().padEnd(LYRIC_MIN_LENGTH, '♪');
+  const statusEmoji = emoji === 'none' ? '' : emoji;
+  const statusText = prefix ? `${prefix}${text}` : text;
 
-  console.log(`[Letra] ${text}`);
-  setCustomStatus(text);
+  console.log(`[Letra] ${statusText}`);
+  setCustomStatus(statusText, statusEmoji);
+  broadcastLine(statusText);
 }
 
 // ── Mostrar info de canción (modo info) ──────────────────────────────────────
 
 function showTrackInfo() {
   if (currentTrackName) {
-    const text = `🎵 ${currentTrackName} — ${currentArtistName}`;
+    const prefix = getPrefix();
+    const emoji = getStatusEmoji();
+    const text = `${prefix}${currentTrackName} — ${currentArtistName}`;
     console.log(`[Info] ${text}`);
-    setCustomStatus(text);
+    setCustomStatus(text, emoji === 'none' ? '' : emoji);
   }
 }
 
-// ── Mostrar barra de progreso (modo progress) ────────────────────────────────
+// ── Formatear tiempo ──────────────────────────────────────────────────────────
+
+function formatTime(ms) {
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+// ── Barra de progreso según estilo ────────────────────────────────────────────
+
+function makeProgressBar(filled, total) {
+  const style = getProgressStyle();
+  if (style === 'squares') {
+    const filledSq = '🟩'.repeat(filled) + '⬛'.repeat(total - filled);
+    return filledSq;
+  }
+  return '▰'.repeat(filled) + '▱'.repeat(total - filled);
+}
+
+// ── Mostrar barra de progreso ────────────────────────────────────────────────
 
 function showProgress() {
   if (!currentTrackId || currentDurationMs <= 0) return;
@@ -58,11 +116,37 @@ function showProgress() {
   const pct = Math.min(100, Math.round((progressMs / currentDurationMs) * 100));
   const barWidth = 10;
   const filled = Math.round((pct / 100) * barWidth);
-  const bar = '▰'.repeat(filled) + '▱'.repeat(barWidth - filled);
-  const text = `🎵 ${bar} ${pct}%`;
+  const bar = makeProgressBar(filled, barWidth);
+  const time = `${formatTime(progressMs)} / ${formatTime(currentDurationMs)}`;
+  const prefix = getPrefix();
+  const emoji = getStatusEmoji();
+  const text = `${prefix}${bar} ${time}`;
 
   console.log(`[Progreso] ${text}`);
-  setCustomStatus(text);
+  setCustomStatus(text, emoji === 'none' ? '' : emoji);
+}
+
+// ── Mostrar modo compacto ─────────────────────────────────────────────────────
+
+function showCompact() {
+  if (!currentTrackId || currentDurationMs <= 0) return;
+
+  let progressMs = lastProgressMs;
+  if (scheduler) {
+    progressMs = scheduler.estimatedProgressMs;
+  }
+
+  const pct = Math.min(100, Math.round((progressMs / currentDurationMs) * 100));
+  const barWidth = 6;
+  const filled = Math.round((pct / 100) * barWidth);
+  const bar = makeProgressBar(filled, barWidth);
+  const time = formatTime(progressMs);
+  const prefix = getPrefix();
+  const emoji = getStatusEmoji();
+  const text = `${prefix}${bar} ${time} ${currentTrackName}`.slice(0, 128);
+
+  console.log(`[Compacto] ${text}`);
+  setCustomStatus(text, emoji === 'none' ? '' : emoji);
 }
 
 // ── Persistir nowplaying ─────────────────────────────────────────────────────
@@ -110,6 +194,9 @@ function applyDisplayMode(newMode) {
     case 'progress':
       showProgress();
       break;
+    case 'compact':
+      showCompact();
+      break;
   }
   saveNowplaying();
 }
@@ -118,6 +205,7 @@ function applyDisplayMode(newMode) {
 
 async function poll() {
   try {
+    refreshConfig();
     const trackFetchedAt = Date.now();
     const track = await getCurrentTrack();
 
@@ -150,6 +238,26 @@ async function poll() {
       return;
     }
 
+    // ── Verificar blacklist ──────────────────────────────────────────────────
+    const blacklist = getBlacklist();
+    const trackLabel = `${track.trackName} — ${track.artistName}`.toLowerCase();
+    const isBlacklisted = blacklist.some(pattern => trackLabel.includes(pattern.toLowerCase()));
+    if (isBlacklisted) {
+      if (currentTrackId !== null) {
+        console.log(`[Principal] Canción en blacklist, ignorando: "${track.trackName}"`);
+        if (scheduler) { scheduler.stop(); scheduler = null; }
+        currentTrackId = null;
+        currentTrackName = '';
+        currentArtistName = '';
+        currentAlbumName = '';
+        currentDurationMs = 0;
+        clearCustomStatus();
+        saveNowplaying();
+      }
+      lastPollTime = now;
+      return;
+    }
+
     // ── Canción cambiada ─────────────────────────────────────────────────────
     if (track.trackId !== currentTrackId) {
       console.log(`[Principal] Canción cambiada → "${track.trackName}" de ${track.artistName}`);
@@ -169,6 +277,8 @@ async function poll() {
         showTrackInfo();
       } else if (displayMode === 'progress') {
         showProgress();
+      } else if (displayMode === 'compact') {
+        showCompact();
       } else {
         const lyrics = await getLyrics(track.trackId, track.trackName, track.artistName, track.albumName, track.durationMs);
 
@@ -176,7 +286,8 @@ async function poll() {
           scheduler = new LyricScheduler(lyrics, onLineChange);
           scheduler.start(track.progressMs + (Date.now() - trackFetchedAt));
         } else {
-          setCustomStatus(`🎵 ${track.trackName} — ${track.artistName}`);
+          lastProgressMs = track.progressMs;
+          showProgress();
         }
       }
 
@@ -198,9 +309,15 @@ async function poll() {
       }
     }
 
-    // ── Actualizar progreso si estamos en modo progress ──────────────────────
-    if (displayMode === 'progress' && currentTrackId) {
-      showProgress();
+    // ── Actualizar progreso periódicamente ─────────────────────────────────
+    if (currentTrackId) {
+      if (displayMode === 'progress') {
+        showProgress();
+      } else if (displayMode === 'compact') {
+        showCompact();
+      } else if (displayMode === 'lyrics' && !scheduler) {
+        showProgress();
+      }
     }
 
     lastProgressMs = track.progressMs;
@@ -220,7 +337,9 @@ async function startPolling() {
   if (scheduler) { scheduler.stop(); scheduler = null; }
   displayMode = getDisplayMode();
   await poll();
-  pollInterval = setInterval(poll, POLL_INTERVAL_MS);
+  const interval = getCooldownMs();
+  pollInterval = setInterval(poll, interval);
+  console.log(`[Principal] Polling cada ${interval}ms`);
 }
 
 async function main() {

@@ -8,7 +8,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey.svg)]()
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-green.svg)]()
 
-**Language:** English · [Español](README.vi.md)
+**Language:** English · [Español](README.es.md)
 
 [Download](#-download) · [How it works](#-how-it-works) · [Run from source](#-run-from-source) · [Build](#-build-exe)
 
@@ -131,7 +131,6 @@ src/
 ├── status.js         — updates Discord custom status (queue + retry)
 ├── config.js         — reads/writes config (token, display mode, etc.)
 ├── constants.js      — shared constants (poll interval, thresholds, etc.)
-├── ipc.js            — file-based IPC between main process and control bot
 ├── setup.js          — first-run Express web UI (token entry, Spotify OAuth)
 └── bot/
     ├── constants.js  — bot-specific constants (colors, mode names, platform)

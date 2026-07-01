@@ -13,5 +13,5 @@ export const COLORS = {
   GREY: 0x95A5A6,
 };
 
-export const VALID_MODES = ['lyrics', 'info', 'progress'];
-export const MODE_NAMES = { lyrics: 'Letras', info: 'Información', progress: 'Progreso' };
+export const VALID_MODES = ['lyrics', 'info', 'progress', 'compact'];
+export const MODE_NAMES = { lyrics: 'Letras', info: 'Información', progress: 'Progreso', compact: 'Compacto' };
