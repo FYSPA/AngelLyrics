@@ -1,8 +1,9 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { CONFIG_DIR, getLiveChannelId, setLiveChannelId, getLiveMessageId, setLiveMessageId } from '../config.js';
+import { CONFIG_DIR, getLiveChannelId, setLiveChannelId, getLiveMessageId, setLiveMessageId, getUiTheme } from '../config.js';
 import { LIVE_UPDATE_INTERVAL_MS } from '../constants.js';
 import { nowplayingEmbed, noMusicEmbed } from './ui.js';
+import { canGenerate, fetchImage, generateImage } from './image.js';
 
 let liveInterval = null;
 
@@ -49,12 +50,27 @@ async function updateLiveMessage(client) {
 
   const np = readNowplaying();
   const embed = np && np.trackName ? nowplayingEmbed(np) : noMusicEmbed();
+  const msgOpts = { embeds: [embed], files: [] };
+
+  if (np && np.trackName && canGenerate() && getUiTheme() !== 'classic') {
+    try {
+      const artBuf = await fetchImage(np.albumArtUrl);
+      const pngBuf = await generateImage(np, np.lyricLine || '', artBuf);
+      if (pngBuf) {
+        embed.setImage('attachment://nowplaying.png');
+        msgOpts.files = [{ attachment: pngBuf, name: 'nowplaying.png' }];
+      }
+    } catch (err) {
+      console.error('[Live] Error generando imagen:', err.message);
+    }
+  }
+
   const msgId = getLiveMessageId();
 
   if (msgId) {
     try {
       const msg = await channel.messages.fetch(msgId);
-      await msg.edit({ embeds: [embed] });
+      await msg.edit(msgOpts);
       return;
     } catch {
       // mensaje eliminado o no encontrado
@@ -62,7 +78,7 @@ async function updateLiveMessage(client) {
   }
 
   try {
-    const msg = await channel.send({ embeds: [embed] });
+    const msg = await channel.send(msgOpts);
     setLiveMessageId(msg.id);
   } catch (err) {
     console.error('[Bot] Error enviando live message:', err.message);

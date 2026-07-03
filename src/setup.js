@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { spawn } from 'child_process';
 import { saveToken, getToken, getSpotifyRefreshToken } from './config.js';
-import { getSpotifyAuthUrl, exchangeSpotifyCode } from './spotify.js';
+import { getSpotifyAuthUrl, exchangeSpotifyCode } from './spotify/index.js';
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';

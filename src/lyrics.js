@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { CONFIG_DIR } from './config.js';
+import { CONFIG_DIR } from './config/paths.js';
 import { LYRIC_CACHE_MAX_AGE_MS } from './constants.js';
 
 const CACHE_FILE = join(CONFIG_DIR, 'lyrics-cache.json');
@@ -83,9 +83,22 @@ async function fetchLRCLIB(trackName, artistName, albumName, durationMs) {
   return parseLRC(data.syncedLyrics);
 }
 
+// ── Helper: distribuir letra plana en líneas con timestamp ────────────────
+
+function distributeLyrics(text, durationMs = 0) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return null;
+  if (lines.length === 1) return [{ timeMs: 0, text: lines[0] }];
+
+  return lines.map((line, i) => ({
+    timeMs: Math.round((i / lines.length) * durationMs),
+    text: line,
+  }));
+}
+
 // ── Fuente 2: lyrics.ovh (plain, fallback) ─────────────────────────────────
 
-async function fetchLyricsOvh(trackName, artistName) {
+async function fetchLyricsOvh(trackName, artistName, durationMs = 0) {
   const res = await fetch(
     `https://api.lyrics.ovh/v1/${encodeURIComponent(artistName)}/${encodeURIComponent(trackName)}`
   );
@@ -95,14 +108,57 @@ async function fetchLyricsOvh(trackName, artistName) {
   const data = await res.json();
   if (!data?.lyrics) return null;
 
-  // Convertir plain text a líneas sin timestamps para que el scheduler
-  // muestre el texto completo como una sola línea "estática"
   const plain = data.lyrics.trim();
   if (!plain) return null;
 
   console.log(`[Letras] Letra plana obtenida de lyrics.ovh para "${trackName}"`);
-  // Devolvemos una línea única con timestamp 0 — el scheduler la mostrará
-  return [{ timeMs: 0, text: plain }];
+  return distributeLyrics(plain, durationMs);
+}
+
+// ── Fuente 3: AZLyrics (plain, scraping) ──────────────────────────────────
+
+function slugify(str) {
+  return str.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .replace(/^the/, '');
+}
+
+async function fetchAZLyrics(trackName, artistName, durationMs = 0) {
+  const artistSlug = slugify(artistName);
+  const trackSlug = slugify(trackName);
+  if (!artistSlug || !trackSlug) return null;
+
+  const url = `https://www.azlyrics.com/lyrics/${artistSlug}/${trackSlug}.html`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+  });
+  if (!res.ok) return null;
+
+  const html = await res.text();
+
+  // AZLyrics places lyrics between <!-- start of lyrics --> and <!-- end of lyrics -->
+  const startMarker = '<!-- start of lyrics -->';
+  const endMarker = '<!-- end of lyrics -->';
+  const startIdx = html.indexOf(startMarker);
+  const endIdx = html.indexOf(endMarker);
+
+  if (startIdx === -1 || endIdx === -1) return null;
+
+  const raw = html.slice(startIdx + startMarker.length, endIdx)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+
+  if (!raw) return null;
+
+  console.log(`[Letras] Letra plana obtenida de AZLyrics para "${trackName}"`);
+  return distributeLyrics(raw, durationMs);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -128,15 +184,26 @@ export async function getLyrics(trackId, trackName, artistName, albumName = '', 
 
   // ── Fuente 2: lyrics.ovh (plain) ───────────────────────────────────────
   try {
-    const plain = await fetchLyricsOvh(trackName, artistName);
+    const plain = await fetchLyricsOvh(trackName, artistName, durationMs);
     if (plain && plain.length > 0) {
-      console.log(`[Letras] Letra plana obtenida de lyrics.ovh para "${trackName}"`);
       cache.set(trackId, plain);
       saveDiskCache();
       return plain;
     }
   } catch (err) {
     console.warn(`[Letras] lyrics.ovh error: ${err.message}`);
+  }
+
+  // ── Fuente 3: AZLyrics (plain, scraping) ──────────────────────────────
+  try {
+    const az = await fetchAZLyrics(trackName, artistName, durationMs);
+    if (az && az.length > 0) {
+      cache.set(trackId, az);
+      saveDiskCache();
+      return az;
+    }
+  } catch (err) {
+    console.warn(`[Letras] AZLyrics error: ${err.message}`);
   }
 
   console.log(`[Letras] Ninguna fuente tiene letras para "${trackName}" de ${artistName}`);

@@ -1,10 +1,49 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials, EmbedBuilder } from 'discord.js';
-import { COLORS, MODE_NAMES, SO_ACTUAL, PM2_NAME } from './src/bot/constants.js';
+import { Client, GatewayIntentBits, Partials, AttachmentBuilder, EmbedBuilder } from 'discord.js';
+import { canGenerate, fetchImage, generateImage } from './src/bot/image.js';
+import { COLORS, MODE_NAMES, SO_ACTUAL, PM2_NAME, VALID_UI_THEMES } from './src/bot/constants.js';
 import { pm2Start, pm2Stop, pm2Restart, pm2Reset, getPm2Status, getPm2Logs } from './src/bot/pm2.js';
-import { controlRow, modeRow, buildModeEmbed, onEmbed, offEmbed, restartEmbed, resetEmbed, modeChangedEmbed, noMusicEmbed, errorEmbed, nowplayingEmbed, liveChannelEmbed, liveChannelRemovedEmbed, channelNotFoundEmbed, statusEmbed, helpEmbed, modoDescription } from './src/bot/ui.js';
+import {
+  controlRow, modeRow,
+  onEmbed, offEmbed, restartEmbed, resetEmbed, errorEmbed,
+  buildModeEmbed, modeChangedEmbed,
+  noMusicEmbed, nowplayingEmbed,
+  liveChannelEmbed, liveChannelRemovedEmbed, channelNotFoundEmbed,
+  statusEmbed, helpEmbed,
+  backendInfoEmbed, backendChangedEmbed,
+  emojiInfoEmbed, emojiChangedEmbed,
+  prefixInfoEmbed, prefixChangedEmbed,
+  styleInfoEmbed, styleChangedEmbed,
+  cooldownInfoEmbed, cooldownChangedEmbed, cooldownErrorEmbed,
+  filterListEmbed, filterAddedEmbed, filterRemovedEmbed, filterUsageEmbed,
+  blacklistInfoEmbed, blacklistAddedEmbed, blacklistRemovedEmbed, blacklistUsageEmbed,
+  broadcastInfoEmbed, broadcastSetEmbed, broadcastRemovedEmbed,
+  formatInfoEmbed, formatChangedEmbed, formatResetEmbed,
+  offsetInfoEmbed, offsetChangedEmbed, offsetErrorEmbed,
+  recentEmptyEmbed, recentListEmbed,
+  logsEmbed,
+  pingEmbed, pingResultEmbed,
+  themeInfoEmbed, themeChangedEmbed, themeRow,
+} from './src/bot/ui.js';
 import { startLiveUpdates, stopLiveUpdates } from './src/bot/live.js';
-import { getDisplayMode, setDisplayMode, getLiveChannelId, setLiveChannelId, setLiveMessageId, getBackend, setBackend, VALID_BACKENDS, VALID_MODES, getStatusEmoji, setStatusEmoji, VALID_EMOJIS, getPrefix, setPrefix, getFilteredWords, addFilteredWord, removeFilteredWord, getCooldownMs, setCooldownMs, getBlacklist, addToBlacklist, removeFromBlacklist, getProgressStyle, setProgressStyle, VALID_PROGRESS_STYLES, getBroadcastWebhook, setBroadcastWebhook, clearBroadcastWebhook, CONFIG_DIR } from './src/config.js';
+import { startKaraoke, stopKaraoke, isKaraokeActive } from './src/bot/lyrics-live.js';
+import {
+  getDisplayMode, setDisplayMode,
+  getLiveChannelId, setLiveChannelId, setLiveMessageId,
+  getBackend, setBackend, VALID_BACKENDS, VALID_MODES,
+  getStatusEmoji, setStatusEmoji, VALID_EMOJIS,
+  getPrefix, setPrefix,
+  getFilteredWords, addFilteredWord, removeFilteredWord,
+  getCooldownMs, setCooldownMs,
+  getBlacklist, addToBlacklist, removeFromBlacklist,
+  getProgressStyle, setProgressStyle, VALID_PROGRESS_STYLES,
+  getBroadcastWebhook, setBroadcastWebhook, clearBroadcastWebhook,
+  CONFIG_DIR,
+  getStatusFormat, setStatusFormat, VALID_FORMAT_VARS, DEFAULT_FORMATS,
+  getLyricOffset, setLyricOffset,
+  getRecentTracks,
+  getUiTheme, setUiTheme,
+} from './src/config.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
@@ -34,6 +73,22 @@ function readNowplaying() {
   } catch {
     return null;
   }
+}
+
+async function addNowplayingImage(embed, np) {
+  if (!canGenerate()) return null;
+  try {
+    const artBuf = await fetchImage(np.albumArtUrl);
+    const pngBuf = await generateImage(np, np.lyricLine || '', artBuf);
+    if (pngBuf) {
+      const att = new AttachmentBuilder(pngBuf, { name: 'nowplaying.png' });
+      embed.setImage('attachment://nowplaying.png');
+      return [att];
+    }
+  } catch (err) {
+    console.error('[Bot] Error generando imagen:', err.message);
+  }
+  return null;
 }
 
 client.on('messageCreate', async (msg) => {
@@ -104,43 +159,28 @@ client.on('messageCreate', async (msg) => {
 
     const np = readNowplaying();
     if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
-    msg.reply({ embeds: [nowplayingEmbed(np)], components: [controlRow(), modeRow()] });
+    const embed = nowplayingEmbed(np);
+    const replyOpts = { embeds: [embed], components: [controlRow(), modeRow()] };
+
+    const files = await addNowplayingImage(embed, np);
+    if (files) replyOpts.files = files;
+
+    msg.reply(replyOpts);
   }
 
   else if (command === '!ping') {
-    const sent = await msg.reply({ embeds: [new EmbedBuilder().setColor(COLORS.GREY).setDescription('🏓 Pong...')] });
+    const sent = await msg.reply({ embeds: [pingEmbed()] });
     const latency = sent.createdTimestamp - msg.createdTimestamp;
-    await sent.edit({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setDescription(`🏓 Pong! **${latency}ms**`)
-        .setTimestamp()
-        .setFooter({ text: `WebSocket: ${client.ws.ping}ms` }),
-      ],
-    });
+    await sent.edit({ embeds: [pingResultEmbed(latency, client.ws.ping)] });
   }
 
   else if (command === '!backend' || command === '!plataforma') {
     const newBackend = args[1];
     if (!newBackend || !VALID_BACKENDS.includes(newBackend)) {
-      const current = getBackend();
-      const desc = VALID_BACKENDS.map(b => `▸ \`${b}\`${b === current ? ' ← actual' : ''}`).join('\n');
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.PURPLE)
-          .setTitle('🎛️ Backend de detección')
-          .setDescription(`Actual: **${current}**\n\n${desc}\n\nUsa \`!backend <nombre>\` para cambiar.`),
-        ],
-      });
+      return msg.reply({ embeds: [backendInfoEmbed(getBackend())] });
     }
     setBackend(newBackend);
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setTitle('🎛️ Backend cambiado')
-        .setDescription(`Nuevo backend: **${newBackend}**\nSe aplicará en el próximo ciclo (~1.5s).`),
-      ],
-    });
+    msg.reply({ embeds: [backendChangedEmbed(newBackend)] });
   }
 
   else if (command === '!status' || command === '!estado') {
@@ -151,214 +191,151 @@ client.on('messageCreate', async (msg) => {
   else if (command === '!emoji') {
     const newEmoji = args[1];
     if (!newEmoji || !VALID_EMOJIS.includes(newEmoji)) {
-      const current = getStatusEmoji();
-      const desc = VALID_EMOJIS.map(e => `▸ \`${e}\`${e === current ? ' ← actual' : ''}`).join('\n');
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.PURPLE)
-          .setTitle('😊 Emoji del status')
-          .setDescription(`Actual: **${current}**\n\n${desc}\n\nUsa \`!emoji <nombre>\` para cambiar.`),
-        ],
-      });
+      return msg.reply({ embeds: [emojiInfoEmbed(getStatusEmoji())] });
     }
     setStatusEmoji(newEmoji);
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setTitle('😊 Emoji cambiado')
-        .setDescription(`Nuevo emoji: **${newEmoji}**\nSe aplicará en el próximo ciclo (~1.5s).`),
-      ],
-    });
+    msg.reply({ embeds: [emojiChangedEmbed(newEmoji)] });
   }
 
   else if (command === '!prefix') {
     const newPrefix = content.slice(args[0].length + 1);
     if (!newPrefix || newPrefix === 'remove') {
       setPrefix('');
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('✏️ Prefijo eliminado')
-          .setDescription('El status ya no mostrará prefijo.'),
-        ],
-      });
+      return msg.reply({ embeds: [prefixChangedEmbed('')] });
     }
     setPrefix(newPrefix);
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setTitle('✏️ Prefijo cambiado')
-        .setDescription(`Nuevo prefijo: **${newPrefix}**\nSe aplicará en el próximo ciclo (~1.5s).`),
-      ],
-    });
+    msg.reply({ embeds: [prefixChangedEmbed(newPrefix, `${newPrefix}Bohemian Rhapsody — Queen`)] });
   }
 
   else if (command === '!style') {
     const newStyle = args[1];
     if (!newStyle || !VALID_PROGRESS_STYLES.includes(newStyle)) {
-      const current = getProgressStyle();
-      const desc = VALID_PROGRESS_STYLES.map(s => `▸ \`${s}\`${s === current ? ' ← actual' : ''}`).join('\n');
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.PURPLE)
-          .setTitle('🎨 Estilo de barra de progreso')
-          .setDescription(`Actual: **${current}**\n\n${desc}\n\nUsa \`!style <nombre>\` para cambiar.`),
-        ],
-      });
+      return msg.reply({ embeds: [styleInfoEmbed(getProgressStyle())] });
     }
     setProgressStyle(newStyle);
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setTitle('🎨 Estilo cambiado')
-        .setDescription(`Nuevo estilo: **${newStyle}**\nSe aplicará en el próximo ciclo (~1.5s).`),
-      ],
-    });
+    msg.reply({ embeds: [styleChangedEmbed(newStyle)] });
   }
 
   else if (command === '!cooldown') {
     const newMs = args[1];
     if (!newMs) {
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.PURPLE)
-          .setTitle('⏱ Cooldown')
-          .setDescription(`Actual: **${getCooldownMs()}ms**\n\nMín: 500ms, Máx: 30000ms\n\nUsa \`!cooldown <ms>\` para cambiar.`),
-        ],
-      });
+      return msg.reply({ embeds: [cooldownInfoEmbed(getCooldownMs())] });
     }
     const ms = parseInt(newMs, 10);
     if (isNaN(ms) || ms < 500 || ms > 30000) {
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.RED)
-          .setTitle('⏱ Cooldown inválido')
-          .setDescription('Debe ser un número entre 500 y 30000.'),
-        ],
-      });
+      return msg.reply({ embeds: [cooldownErrorEmbed()] });
     }
     setCooldownMs(ms);
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setTitle('⏱ Cooldown cambiado')
-        .setDescription(`Nuevo intervalo: **${ms}ms**\nSe aplicará al reiniciar el proceso.`),
-      ],
-    });
+    msg.reply({ embeds: [cooldownChangedEmbed(ms)] });
   }
 
   else if (command === '!filter') {
     const sub = args[1];
     if (sub === 'add') {
       const word = content.slice(args[0].length + args[1].length + 2);
-      if (!word) return msg.reply({ embeds: [new EmbedBuilder().setColor(COLORS.RED).setTitle('❌ Uso').setDescription('`!filter add <palabra>`')] });
+      if (!word) return msg.reply({ embeds: [filterUsageEmbed()] });
       addFilteredWord(word);
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('🔇 Palabra filtrada')
-          .setDescription(`"**${word}**" será reemplazada por \`***\` en las letras.`),
-        ],
-      });
+      return msg.reply({ embeds: [filterAddedEmbed(word)] });
     }
     if (sub === 'remove') {
       const word = content.slice(args[0].length + args[1].length + 2);
-      if (!word) return msg.reply({ embeds: [new EmbedBuilder().setColor(COLORS.RED).setTitle('❌ Uso').setDescription('`!filter remove <palabra>`')] });
+      if (!word) return msg.reply({ embeds: [filterUsageEmbed()] });
       removeFilteredWord(word);
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('🔇 Filtro eliminado')
-          .setDescription(`"**${word}**" ya no será filtrada.`),
-        ],
-      });
+      return msg.reply({ embeds: [filterRemovedEmbed(word)] });
     }
-    const list = getFilteredWords();
-    const desc = list.length ? list.map(w => `▸ \`${w}\``).join('\n') : '*No hay palabras filtradas.*';
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.PURPLE)
-        .setTitle('🔇 Palabras filtradas')
-        .setDescription(`${desc}\n\nUsa \`!filter add <palabra>\` o \`!filter remove <palabra>\``),
-      ],
-    });
+    msg.reply({ embeds: [filterListEmbed(getFilteredWords())] });
   }
 
   else if (command === '!blacklist') {
     const sub = args[1];
     if (sub === 'add') {
       const pattern = content.slice(args[0].length + args[1].length + 2);
-      if (!pattern) return msg.reply({ embeds: [new EmbedBuilder().setColor(COLORS.RED).setTitle('❌ Uso').setDescription('`!blacklist add <artista o canción>`')] });
+      if (!pattern) return msg.reply({ embeds: [blacklistUsageEmbed()] });
       addToBlacklist(pattern);
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('⛔ Añadido a blacklist')
-          .setDescription(`"**${pattern}**" será ignorado.`),
-        ],
-      });
+      return msg.reply({ embeds: [blacklistAddedEmbed(pattern)] });
     }
     if (sub === 'remove') {
       const pattern = content.slice(args[0].length + args[1].length + 2);
-      if (!pattern) return msg.reply({ embeds: [new EmbedBuilder().setColor(COLORS.RED).setTitle('❌ Uso').setDescription('`!blacklist remove <patrón>`')] });
+      if (!pattern) return msg.reply({ embeds: [blacklistUsageEmbed()] });
       removeFromBlacklist(pattern);
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('⛔ Eliminado de blacklist')
-          .setDescription(`"**${pattern}**" ya no será ignorado.`),
-        ],
-      });
+      return msg.reply({ embeds: [blacklistRemovedEmbed(pattern)] });
     }
-    const list = getBlacklist();
-    const desc = list.length ? list.map(p => `▸ \`${p}\``).join('\n') : '*No hay elementos en blacklist.*';
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.PURPLE)
-        .setTitle('⛔ Blacklist')
-        .setDescription(`${desc}\n\nUsa \`!blacklist add <patrón>\` o \`!blacklist remove <patrón>\``),
-      ],
-    });
+    msg.reply({ embeds: [blacklistInfoEmbed(getBlacklist())] });
   }
 
   else if (command === '!broadcast') {
     const sub = args[1];
     if (sub === 'remove') {
       clearBroadcastWebhook();
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('📢 Broadcast eliminado')
-          .setDescription('Ya no se enviarán letras a ningún webhook.'),
-        ],
-      });
+      return msg.reply({ embeds: [broadcastRemovedEmbed()] });
     }
     if (sub && sub.startsWith('http')) {
       setBroadcastWebhook(sub);
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(COLORS.GREEN)
-          .setTitle('📢 Broadcast configurado')
-          .setDescription('Las letras se enviarán a ese webhook en tiempo real.'),
-        ],
-      });
+      return msg.reply({ embeds: [broadcastSetEmbed()] });
     }
-    const current = getBroadcastWebhook();
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.PURPLE)
-        .setTitle('📢 Broadcast')
-        .setDescription(current
-          ? `Webhook actual: \`${current}\`\n\nUsa \`!broadcast remove\` para eliminarlo.`
-          : '*No hay webhook configurado.*\n\nUsa \`!broadcast <url_del_webhook>\` para configurarlo.'),
-      ],
-    });
+    msg.reply({ embeds: [broadcastInfoEmbed(getBroadcastWebhook())] });
+  }
+
+  else if (command === '!format') {
+    const vars = VALID_FORMAT_VARS.join(' ');
+    const modeArg = args[1];
+    const isModeArg = modeArg && VALID_MODES.includes(modeArg);
+
+    if (!modeArg || modeArg === 'reset' || (isModeArg && (!args[2] || args[2] === 'reset'))) {
+      if (modeArg === 'reset') {
+        setStatusFormat(null);
+        return msg.reply({ embeds: [formatResetEmbed()] });
+      }
+      if (isModeArg && args[2] === 'reset') {
+        setStatusFormat(null, modeArg);
+        return msg.reply({ embeds: [formatResetEmbed(modeArg)] });
+      }
+
+      const mode = isModeArg ? modeArg : getDisplayMode();
+      const allFormats = {};
+      for (const m of VALID_MODES) {
+        allFormats[m] = getStatusFormat(m);
+      }
+      return msg.reply({ embeds: [formatInfoEmbed(mode, allFormats)] });
+    }
+
+    if (isModeArg) {
+      setStatusFormat(args.slice(2).join(' '), modeArg);
+      return msg.reply({ embeds: [formatChangedEmbed(args.slice(2).join(' '), modeArg)] });
+    }
+
+    setStatusFormat(args.slice(1).join(' '));
+    msg.reply({ embeds: [formatChangedEmbed(args.slice(1).join(' '))] });
+  }
+
+  else if (command === '!offset') {
+    const current = getLyricOffset();
+    if (!args[1] || args[1] === 'reset') {
+      if (args[1] === 'reset') setLyricOffset(0);
+      return msg.reply({ embeds: [offsetInfoEmbed(current)] });
+    }
+    const ms = parseInt(args[1], 10);
+    if (isNaN(ms) || ms < -10000 || ms > 10000) {
+      return msg.reply({ embeds: [offsetErrorEmbed()] });
+    }
+    setLyricOffset(ms);
+    msg.reply({ embeds: [offsetChangedEmbed(ms)] });
+  }
+
+  else if (command === '!recent') {
+    const tracks = getRecentTracks();
+    if (!tracks.length) return msg.reply({ embeds: [recentEmptyEmbed()] });
+    msg.reply({ embeds: [recentListEmbed(tracks)] });
   }
 
   else if (command === '!repeat') {
     const np = readNowplaying();
     if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
-    msg.reply({ embeds: [nowplayingEmbed(np)], components: [controlRow(), modeRow()] });
+    const embed = nowplayingEmbed(np);
+    const replyOpts = { embeds: [embed], components: [controlRow(), modeRow()] };
+    const files = await addNowplayingImage(embed, np);
+    if (files) replyOpts.files = files;
+    msg.reply(replyOpts);
   }
 
   else if (command === '!logs') {
@@ -369,15 +346,38 @@ client.on('messageCreate', async (msg) => {
       return cleaned.length > 150 ? cleaned.slice(0, 150) + '…' : cleaned;
     }).join('\n').slice(0, 4000);
 
-    msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREY)
-        .setTitle('📋 Últimos logs')
-        .setDescription(formatted ? `\`\`\`${formatted}\`\`\`` : '*No hay logs.*')
-        .setFooter({ text: `pm2 logs ${PM2_NAME} --lines 30` })
-        .setTimestamp(),
-      ],
-    });
+    msg.reply({ embeds: [logsEmbed(formatted || null, `pm2 logs ${PM2_NAME} --lines 30`)] });
+  }
+
+  else if (command === '!lyrics' || command === '!letras') {
+    if (isKaraokeActive()) {
+      stopKaraoke();
+      msg.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(COLORS.RED)
+          .setTitle('Karaoke detenido')
+          .setDescription('Ya no se mostrar\u00E1n las letras en tiempo real.')
+        ],
+      });
+    } else {
+      startKaraoke(client, msg.channelId);
+      msg.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(COLORS.GREEN)
+          .setTitle('Karaoke iniciado')
+          .setDescription('Las letras se actualizar\u00E1n en tiempo real en este canal. Env\u00EDa `!lyrics` de nuevo para detener.')
+        ],
+      });
+    }
+  }
+
+  else if (command === '!ui' || command === '!tema') {
+    const theme = args[1];
+    if (!theme || !VALID_UI_THEMES.includes(theme)) {
+      return msg.reply({ embeds: [themeInfoEmbed(getUiTheme())], components: [themeRow()] });
+    }
+    setUiTheme(theme);
+    msg.reply({ embeds: [themeChangedEmbed(theme)], components: [themeRow()] });
   }
 
   else if (command === '!help' || command === '!ayuda') {
@@ -424,6 +424,16 @@ client.on('interactionCreate', async (interaction) => {
       const mode = interaction.customId.replace('cmd_mode_', '');
       setDisplayMode(mode);
       interaction.editReply({ embeds: [modeChangedEmbed(mode)], components: [controlRow(), modeRow()] });
+      break;
+    }
+    case 'cmd_theme_classic':
+    case 'cmd_theme_cyberpunk':
+    case 'cmd_theme_minimal':
+    case 'cmd_theme_retro':
+    case 'cmd_theme_gradient': {
+      const theme = interaction.customId.replace('cmd_theme_', '');
+      setUiTheme(theme);
+      interaction.editReply({ embeds: [themeChangedEmbed(theme)], components: [controlRow(), modeRow(), themeRow()] });
       break;
     }
   }

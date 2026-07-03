@@ -1,7 +1,7 @@
-export { CONFIG_DIR, CONFIG_FILE, APP_NAME, migrateOldConfig } from './config/paths.js';
-export { readConfig, writeConfig, refreshConfig } from './config/cache.js';
-export { encryptToken, decryptToken } from './config/crypto.js';
-export { getToken, saveToken, clearToken, getSpotifyRefreshToken, getSpotifyUser, saveSpotifyTokens, clearSpotifyTokens } from './config/tokens.js';
+export { CONFIG_DIR, CONFIG_FILE, APP_NAME, migrateOldConfig } from './paths.js';
+export { readConfig, writeConfig, refreshConfig } from './cache.js';
+export { encryptToken, decryptToken } from './crypto.js';
+export { getToken, saveToken, clearToken, getSpotifyRefreshToken, getSpotifyUser, saveSpotifyTokens, clearSpotifyTokens } from './tokens.js';
 export {
   VALID_MODES, getDisplayMode, setDisplayMode,
   VALID_BACKENDS, getBackend, setBackend,
@@ -17,4 +17,4 @@ export {
   getLiveChannelId, setLiveChannelId, getLiveMessageId, setLiveMessageId,
   getRecentTracks, addRecentTrack,
   getLyricOffset, setLyricOffset,
-} from './config/settings.js';
+} from './settings.js';
