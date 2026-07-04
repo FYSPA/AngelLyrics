@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials, AttachmentBuilder, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, AttachmentBuilder, EmbedBuilder, REST, Routes } from 'discord.js';
 import { canGenerate, fetchImage, generateImage } from './src/bot/image.js';
 import { COLORS, MODE_NAMES, SO_ACTUAL, PM2_NAME, VALID_UI_THEMES } from './src/bot/constants.js';
 import { pm2Start, pm2Stop, pm2Restart, pm2Reset, getPm2Status, getPm2Logs } from './src/bot/pm2.js';
@@ -24,6 +24,8 @@ import {
   logsEmbed,
   pingEmbed, pingResultEmbed,
   themeInfoEmbed, themeChangedEmbed, themeRow,
+  formatOverrideAddedEmbed, formatOverrideRemovedEmbed, formatOverrideListEmbed,
+  statsEmbed, statsResetEmbed,
 } from './src/bot/ui.js';
 import { startLiveUpdates, stopLiveUpdates } from './src/bot/live.js';
 import { startKaraoke, stopKaraoke, isKaraokeActive } from './src/bot/lyrics-live.js';
@@ -38,14 +40,15 @@ import {
   getBlacklist, addToBlacklist, removeFromBlacklist,
   getProgressStyle, setProgressStyle, VALID_PROGRESS_STYLES,
   getBroadcastWebhook, setBroadcastWebhook, clearBroadcastWebhook,
-  CONFIG_DIR,
   getStatusFormat, setStatusFormat, VALID_FORMAT_VARS, DEFAULT_FORMATS,
   getLyricOffset, setLyricOffset,
   getRecentTracks,
   getUiTheme, setUiTheme,
+  getFormatOverrides, setFormatOverride, removeFormatOverride,
+  getStats, resetStats,
 } from './src/config.js';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { readNowplaying } from './src/core/nowplaying.js';
+import { COMMANDS, executeSlashCommand } from './src/bot/commands.js';
 
 const BOT_TOKEN = process.env.CONTROL_BOT_TOKEN;
 const OWNER_ID = process.env.OWNER_ID;
@@ -64,16 +67,6 @@ const client = new Client({
   ],
   partials: [Partials.Channel],
 });
-
-function readNowplaying() {
-  try {
-    const file = join(CONFIG_DIR, 'nowplaying.json');
-    if (!existsSync(file)) return null;
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
-}
 
 async function addNowplayingImage(embed, np) {
   if (!canGenerate()) return null;
@@ -277,6 +270,28 @@ client.on('messageCreate', async (msg) => {
   }
 
   else if (command === '!format') {
+    if (args[1] === 'override') {
+      const sub = args[2];
+      if (sub === 'add') {
+        const type = args[3];
+        const name = args[4];
+        const template = content.slice(args[0].length + args[1].length + args[2].length + args[3].length + args[4].length + 5);
+        if (!type || !name || !template || !['artist', 'album', 'track'].includes(type)) {
+          return msg.reply({ embeds: [formatInfoEmbed(getDisplayMode(), {})] });
+        }
+        setFormatOverride(type, name, template);
+        return msg.reply({ embeds: [formatOverrideAddedEmbed(type, name, template)] });
+      }
+      if (sub === 'remove') {
+        const type = args[3];
+        const name = args[4];
+        if (!type || !name) return msg.reply({ embeds: [formatInfoEmbed(getDisplayMode(), {})] });
+        removeFormatOverride(type, name);
+        return msg.reply({ embeds: [formatOverrideRemovedEmbed(type, name)] });
+      }
+      return msg.reply({ embeds: [formatOverrideListEmbed(getFormatOverrides())] });
+    }
+
     const vars = VALID_FORMAT_VARS.join(' ');
     const modeArg = args[1];
     const isModeArg = modeArg && VALID_MODES.includes(modeArg);
@@ -380,12 +395,28 @@ client.on('messageCreate', async (msg) => {
     msg.reply({ embeds: [themeChangedEmbed(theme)], components: [themeRow()] });
   }
 
+  else if (command === '!stats' || command === '!estadisticas') {
+    if (args[1] === 'reset') {
+      resetStats();
+      return msg.reply({ embeds: [statsResetEmbed()] });
+    }
+    msg.reply({ embeds: [statsEmbed(getStats())] });
+  }
+
   else if (command === '!help' || command === '!ayuda') {
     msg.reply({ embeds: [helpEmbed()] });
   }
 });
 
 client.on('interactionCreate', async (interaction) => {
+  if (interaction.isChatInputCommand()) {
+    if (interaction.user.id !== OWNER_ID) {
+      return interaction.reply({ content: 'No autorizado.', ephemeral: true });
+    }
+    await executeSlashCommand(interaction, client);
+    return;
+  }
+
   if (!interaction.isButton()) return;
   if (interaction.user.id !== OWNER_ID) {
     return interaction.reply({ content: 'No autorizado.', ephemeral: true });
@@ -436,13 +467,49 @@ client.on('interactionCreate', async (interaction) => {
       interaction.editReply({ embeds: [themeChangedEmbed(theme)], components: [controlRow(), modeRow(), themeRow()] });
       break;
     }
+    case 'cmd_repeat': {
+      const np = readNowplaying();
+      if (!np || !np.trackName) return interaction.editReply({ embeds: [noMusicEmbed()] });
+      const embed = nowplayingEmbed(np);
+      const replyOpts = { embeds: [embed], components: [controlRow(), modeRow()] };
+      const files = await addNowplayingImage(embed, np);
+      if (files) replyOpts.files = files;
+      interaction.editReply(replyOpts);
+      break;
+    }
   }
 });
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`[Bot] Conectado como ${client.user.tag}`);
   console.log(`[Bot] SO detectado: ${SO_ACTUAL}`);
   console.log(`[Bot] Esperando comandos por DM de tu usuario (${OWNER_ID})…`);
+
+  const CLIENT_ID = process.env.CLIENT_ID;
+  const DEV_GUILD_ID = process.env.DEV_GUILD_ID;
+
+  if (!CLIENT_ID) {
+    console.log('[Bot] CLIENT_ID no configurado — no se registraron slash commands.');
+    console.log('[Bot] Agrega CLIENT_ID a .env para habilitar slash commands.');
+  } else {
+    const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+
+    if (DEV_GUILD_ID) {
+      try {
+        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, DEV_GUILD_ID), { body: COMMANDS });
+        console.log(`[Bot] ${COMMANDS.length} comandos slash registrados en guild ${DEV_GUILD_ID} (instantáneo).`);
+      } catch (err) {
+        console.error('[Bot] Error registrando comandos en guild:', err.message);
+      }
+    } else {
+      try {
+        await rest.put(Routes.applicationCommands(CLIENT_ID), { body: COMMANDS });
+        console.log(`[Bot] ${COMMANDS.length} comandos slash registrados globalmente (puede tardar hasta 1h).`);
+      } catch (err) {
+        console.error('[Bot] Error registrando comandos globales:', err.message);
+      }
+    }
+  }
 
   const savedChannel = getLiveChannelId();
   if (savedChannel) {
@@ -450,5 +517,16 @@ client.once('ready', () => {
     startLiveUpdates(client);
   }
 });
+
+function shutdown() {
+  console.log('[Bot] Cerrando sesión…');
+  stopLiveUpdates();
+  stopKaraoke();
+  client.destroy();
+  process.exit(0);
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 client.login(BOT_TOKEN);

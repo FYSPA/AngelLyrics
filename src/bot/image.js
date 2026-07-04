@@ -31,6 +31,29 @@ function trunc(str, max) {
   return str.length > max ? str.slice(0, max - 1) + '\u2026' : str;
 }
 
+function wrapText(text, maxLen) {
+  if (!text) return [];
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (w.length > maxLen) {
+      if (cur) { lines.push(cur); cur = ''; }
+      lines.push(w);
+      continue;
+    }
+    const test = cur ? cur + ' ' + w : w;
+    if (test.length > maxLen && cur) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = test;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
 let _sharp = undefined;
 async function getSharp() {
   if (_sharp === undefined) {
@@ -73,146 +96,124 @@ function progressBarSVG(x, y, w, h, pct, fill, bg, filter) {
   return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (h / 2) + '" fill="' + bg + '"/>\n<rect x="' + x + '" y="' + y + '" width="' + filled + '" height="' + h + '" rx="' + (h / 2) + '" fill="' + fill + '"' + (filter ? ' filter="url(' + filter + ')"' : '') + '/>';
 }
 
-// ── Theme builders ──────────────────────────────────────────────────────────
+// ── Theme config ───────────────────────────────────────────────────────────
+// Each theme defines its visual properties. A single builder uses these.
 
-function buildClassicSVG() {
-  return null;
+const THEMES = {
+  cyberpunk: {
+    titleTrunc: 40, artistTrunc: 40, lyricsWrap: 55,
+    defs: '<pattern id="g" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M 30 0 L 0 0 0 30" fill="none" stroke="#151530" stroke-width="0.5"/></pattern><filter id="gp"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="gc"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="gs"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
+    artRx: 12, artBorder: '#00ffff', artGlow: '#glowCyan', artNoBg: '#1a1a2e',
+    bg: ['<rect width="' + W + '" height="' + H + '" fill="#0a0a12"/>', '<rect width="' + W + '" height="' + H + '" fill="url(#g)"/>'],
+    decorations: [
+      '<line x1="0" y1="0" x2="' + W + '" y2="0" stroke="#ff00ff" stroke-width="2" filter="url(#gp)"/>',
+      '<line x1="0" y1="' + (H - 2) + '" x2="' + W + '" y2="' + (H - 2) + '" stroke="#00ffff" stroke-width="2" filter="url(#gc)"/>',
+      '<polygon points="760,380 780,395 740,395" fill="#ff00ff" opacity="0.3"/>',
+      '<polygon points="20,20 30,35 10,35" fill="#00ffff" opacity="0.3"/>',
+    ],
+    title: { x: 260, y: 125, font: 'monospace', size: 24, fill: '#ff00ff', filter: 'url(#gs)' },
+    artist: { x: 260, y: 158, font: 'monospace', size: 15, fill: '#00ffff' },
+    lyrics: { x: 260, y: 215, font: 'monospace', size: 14, fill: '#c084fc', lineH: 20 },
+    bar: { x: 260, y: 300, w: 300, h: 4, fill: '#ff00ff', bg: '#1a1a3a', filter: '#gp' },
+    time: { x: 570, y: 305, font: 'monospace', size: 12, fill: '#888' },
+    pct: { x: 570, y: 285, font: 'monospace', size: 12, fill: '#888' },
+  },
+  minimal: {
+    titleTrunc: 45, artistTrunc: 45, lyricsWrap: 70,
+    defs: '',
+    artRx: 8, artBorder: '#ffffff', artGlow: null, artNoBg: '#1a1a2e',
+    bg: ['<rect width="' + W + '" height="' + H + '" fill="#121212"/>'],
+    decorations: [],
+    title: { x: 260, y: 125, font: 'sans-serif', size: 22, fill: '#ffffff' },
+    artist: { x: 260, y: 155, font: 'sans-serif', size: 15, fill: '#888888' },
+    lyrics: { x: 260, y: 215, font: 'sans-serif', size: 14, fill: '#aaaaaa', lineH: 20 },
+    bar: { x: 260, y: 300, w: 300, h: 3, fill: '#ffffff', bg: '#333333', filter: null },
+    time: { x: 570, y: 303, font: 'sans-serif', size: 12, fill: '#666666' },
+    pct: { x: 570, y: 285, font: 'sans-serif', size: 12, fill: '#666666' },
+  },
+  retro: {
+    titleTrunc: 40, artistTrunc: 40, lyricsWrap: 55,
+    defs: '<pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="2" fill="rgba(0,0,0,0.25)"/></pattern><filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
+    artRx: 0, artBorder: '#00ff41', artGlow: null, artNoBg: '#0a0a0a',
+    bg: ['<rect width="' + W + '" height="' + H + '" fill="#0a0a0a"/>', '<rect width="' + W + '" height="' + H + '" fill="url(#scanlines)"/>'],
+    decorations: ['<rect x="10" y="10" width="' + (W - 20) + '" height="' + (H - 20) + '" fill="none" stroke="#00ff41" stroke-width="1" opacity="0.3" rx="4"/>'],
+    title: { x: 260, y: 125, font: 'monospace', size: 20, fill: '#00ff41', filter: 'url(#glow)' },
+    artist: { x: 260, y: 155, font: 'monospace', size: 14, fill: '#00aa41' },
+    lyrics: { x: 260, y: 215, font: 'monospace', size: 13, fill: '#00ff41', lineH: 18 },
+    bar: { x: 260, y: 300, w: 300, h: 6, fill: '#00ff41', bg: '#003300', filter: null },
+    time: { x: 570, y: 305, font: 'monospace', size: 12, fill: '#00ff41' },
+    pct: { x: 570, y: 285, font: 'monospace', size: 12, fill: '#00ff41' },
+  },
+  gradient: {
+    titleTrunc: 45, artistTrunc: 45, lyricsWrap: 70,
+    defs: '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f0c29"/><stop offset="50%" stop-color="#302b63"/><stop offset="100%" stop-color="#24243e"/></linearGradient>',
+    artRx: 12, artBorder: '#ffffff', artGlow: null, artNoBg: '#1a1a2e',
+    bg: ['<rect width="' + W + '" height="' + H + '" fill="url(#bg)"/>'],
+    decorations: [],
+    title: { x: 260, y: 125, font: 'sans-serif', size: 22, fill: '#ffffff' },
+    artist: { x: 260, y: 155, font: 'sans-serif', size: 15, fill: 'rgba(255,255,255,0.7)' },
+    lyrics: { x: 260, y: 215, font: 'sans-serif', size: 14, fill: 'rgba(255,255,255,0.9)', lineH: 20 },
+    bar: { x: 260, y: 300, w: 300, h: 4, fill: '#ffffff', bg: 'rgba(255,255,255,0.2)', filter: null },
+    time: { x: 570, y: 304, font: 'sans-serif', size: 12, fill: 'rgba(255,255,255,0.6)' },
+    pct: { x: 570, y: 285, font: 'sans-serif', size: 12, fill: 'rgba(255,255,255,0.6)' },
+  },
+};
+
+function textTag(cfg, s) {
+  var f = cfg.filter ? ' filter="url(' + cfg.filter + ')"' : '';
+  var w = cfg.weight ? ' font-weight="' + cfg.weight + '"' : '';
+  return '<text x="' + cfg.x + '" y="' + cfg.y + '" font-family="' + cfg.font + '" font-size="' + cfg.size + '" fill="' + cfg.fill + '"' + w + f + '>' + s + '</text>';
 }
 
-function buildCyberpunkSVG(track, lyricLine, imgBuf) {
-  const title = trunc(track.trackName, 40);
-  const artist = trunc(track.artistName, 40);
-  const lyrics = trunc(lyricLine || '', 80);
-  const pct = track.durationMs > 0 ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0;
-  const barW = 300;
-  const tCur = fmt(track.progressMs);
-  const tTotal = fmt(track.durationMs);
-  const img = artTag(imgBuf, '#00ffff', '12', '#glowCyan');
-  const lyricsTag = lyrics ? '<text x="260" y="215" font-family="monospace" font-size="14" fill="#c084fc">' + esc(lyrics) + '</text>' : '';
+function buildThemeSVG(themeName, track, lyricLine, imgBuf) {
+  var t = THEMES[themeName];
+  if (!t) return null;
 
-  return [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">',
-    '<defs>',
-    '<pattern id="g" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M 30 0 L 0 0 0 30" fill="none" stroke="#151530" stroke-width="0.5"/></pattern>',
-    '<filter id="gp"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    '<filter id="gc"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    '<filter id="gs"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    '<clipPath id="artClip"><rect x="' + ART_X + '" y="' + ART_Y + '" width="' + ART_SIZE + '" height="' + ART_SIZE + '" rx="12"/></clipPath>',
-    '</defs>',
-    '<rect width="' + W + '" height="' + H + '" fill="#0a0a12"/>',
-    '<rect width="' + W + '" height="' + H + '" fill="url(#g)"/>',
-    '<line x1="0" y1="0" x2="' + W + '" y2="0" stroke="#ff00ff" stroke-width="2" filter="url(#gp)"/>',
-    '<line x1="0" y1="' + (H - 2) + '" x2="' + W + '" y2="' + (H - 2) + '" stroke="#00ffff" stroke-width="2" filter="url(#gc)"/>',
-    img,
-    '<text x="260" y="125" font-family="monospace" font-size="24" font-weight="bold" fill="#ff00ff" filter="url(#gs)">' + esc(title) + '</text>',
-    '<text x="260" y="158" font-family="monospace" font-size="15" fill="#00ffff">' + esc(artist) + '</text>',
-    lyricsTag,
-    progressBarSVG(260, 300, barW, 4, pct, '#ff00ff', '#1a1a3a', '#gp'),
-    '<text x="570" y="305" font-family="monospace" font-size="12" fill="#888">' + tCur + ' / ' + tTotal + '</text>',
-    '<text x="570" y="285" font-family="monospace" font-size="12" fill="#888">' + pct + '%</text>',
-    '<polygon points="760,380 780,395 740,395" fill="#ff00ff" opacity="0.3"/>',
-    '<polygon points="20,20 30,35 10,35" fill="#00ffff" opacity="0.3"/>',
-    '</svg>',
-  ].join('\n');
-}
+  var title = esc(trunc(track.trackName, t.titleTrunc));
+  var artist = esc(trunc(track.artistName, t.artistTrunc));
+  var lyricsLines = wrapText(trunc(lyricLine || '', 160), t.lyricsWrap);
+  var pct = track.durationMs > 0 ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0;
+  var tCur = fmt(track.progressMs);
+  var tTotal = fmt(track.durationMs);
 
-function buildMinimalSVG(track, lyricLine, imgBuf) {
-  const title = trunc(track.trackName, 45);
-  const artist = trunc(track.artistName, 45);
-  const lyrics = trunc(lyricLine || '', 85);
-  const pct = track.durationMs > 0 ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0;
-  const barW = 300;
-  const tCur = fmt(track.progressMs);
-  const tTotal = fmt(track.durationMs);
-  const img = artTag(imgBuf, '#ffffff', '8', null);
-  const lyricsTag = lyrics ? '<text x="260" y="215" font-family="sans-serif" font-size="14" fill="#aaaaaa">' + esc(lyrics) + '</text>' : '';
+  var parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">'];
 
-  return [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">',
-    '<clipPath id="artClip"><rect x="' + ART_X + '" y="' + ART_Y + '" width="' + ART_SIZE + '" height="' + ART_SIZE + '" rx="8"/></clipPath>',
-    '<rect width="' + W + '" height="' + H + '" fill="#121212"/>',
-    img,
-    '<text x="260" y="125" font-family="sans-serif" font-size="22" font-weight="bold" fill="#ffffff">' + esc(title) + '</text>',
-    '<text x="260" y="155" font-family="sans-serif" font-size="15" fill="#888888">' + esc(artist) + '</text>',
-    lyricsTag,
-    progressBarSVG(260, 300, barW, 3, pct, '#ffffff', '#333333', null),
-    '<text x="570" y="303" font-family="sans-serif" font-size="12" fill="#666666">' + tCur + ' / ' + tTotal + '</text>',
-    '<text x="570" y="285" font-family="sans-serif" font-size="12" fill="#666666">' + pct + '%</text>',
-    '</svg>',
-  ].join('\n');
-}
+  if (t.defs) {
+    parts.push('<defs>');
+    parts.push(t.defs);
+    parts.push('<clipPath id="artClip"><rect x="' + ART_X + '" y="' + ART_Y + '" width="' + ART_SIZE + '" height="' + ART_SIZE + '" rx="' + t.artRx + '"/></clipPath>');
+    parts.push('</defs>');
+  } else {
+    parts.push('<clipPath id="artClip"><rect x="' + ART_X + '" y="' + ART_Y + '" width="' + ART_SIZE + '" height="' + ART_SIZE + '" rx="' + t.artRx + '"/></clipPath>');
+  }
 
-function buildRetroSVG(track, lyricLine, imgBuf) {
-  const title = trunc(track.trackName, 40);
-  const artist = trunc(track.artistName, 40);
-  const lyrics = trunc(lyricLine || '', 80);
-  const pct = track.durationMs > 0 ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0;
-  const barW = 300;
-  const tCur = fmt(track.progressMs);
-  const tTotal = fmt(track.durationMs);
-  const img = artTag(imgBuf, '#00ff41', '0', null);
-  const lyricsTag = lyrics ? '<text x="260" y="215" font-family="monospace" font-size="13" fill="#00ff41">' + esc(lyrics) + '</text>' : '';
+  for (var i = 0; i < t.bg.length; i++) parts.push(t.bg[i]);
+  for (var i = 0; i < t.decorations.length; i++) parts.push(t.decorations[i]);
 
-  return [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">',
-    '<defs>',
-    '<pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="2" fill="rgba(0,0,0,0.25)"/></pattern>',
-    '<filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    '<clipPath id="artClip"><rect x="' + ART_X + '" y="' + ART_Y + '" width="' + ART_SIZE + '" height="' + ART_SIZE + '"/></clipPath>',
-    '</defs>',
-    '<rect width="' + W + '" height="' + H + '" fill="#0a0a0a"/>',
-    '<rect width="' + W + '" height="' + H + '" fill="url(#scanlines)"/>',
-    '<rect x="10" y="10" width="' + (W - 20) + '" height="' + (H - 20) + '" fill="none" stroke="#00ff41" stroke-width="1" opacity="0.3" rx="4"/>',
-    img,
-    '<text x="260" y="125" font-family="monospace" font-size="20" font-weight="bold" fill="#00ff41" filter="url(#glow)">' + esc(title) + '</text>',
-    '<text x="260" y="155" font-family="monospace" font-size="14" fill="#00aa41">' + esc(artist) + '</text>',
-    lyricsTag,
-    progressBarSVG(260, 300, barW, 6, pct, '#00ff41', '#003300', null),
-    '<text x="570" y="305" font-family="monospace" font-size="12" fill="#00ff41">' + tCur + ' / ' + tTotal + '</text>',
-    '<text x="570" y="285" font-family="monospace" font-size="12" fill="#00ff41">' + pct + '%</text>',
-    '</svg>',
-  ].join('\n');
-}
+  parts.push(artTag(imgBuf, t.artBorder, t.artRx, t.artGlow));
+  parts.push(textTag(t.title, title));
+  parts.push(textTag(t.artist, artist));
 
-function buildGradientSVG(track, lyricLine, imgBuf) {
-  const title = trunc(track.trackName, 45);
-  const artist = trunc(track.artistName, 45);
-  const lyrics = trunc(lyricLine || '', 85);
-  const pct = track.durationMs > 0 ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0;
-  const barW = 300;
-  const tCur = fmt(track.progressMs);
-  const tTotal = fmt(track.durationMs);
-  const img = artTag(imgBuf, '#ffffff', '12', null);
-  const lyricsTag = lyrics ? '<text x="260" y="215" font-family="sans-serif" font-size="14" fill="rgba(255,255,255,0.9)">' + esc(lyrics) + '</text>' : '';
+  if (lyricsLines.length) {
+    for (var i = 0; i < lyricsLines.length; i++) {
+      parts.push('<text x="' + t.lyrics.x + '" y="' + (t.lyrics.y + i * t.lyrics.lineH) + '" font-family="' + t.lyrics.font + '" font-size="' + t.lyrics.size + '" fill="' + t.lyrics.fill + '">' + esc(lyricsLines[i]) + '</text>');
+    }
+  }
 
-  return [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">',
-    '<defs>',
-    '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f0c29"/><stop offset="50%" stop-color="#302b63"/><stop offset="100%" stop-color="#24243e"/></linearGradient>',
-    '<clipPath id="artClip"><rect x="' + ART_X + '" y="' + ART_Y + '" width="' + ART_SIZE + '" height="' + ART_SIZE + '" rx="12"/></clipPath>',
-    '</defs>',
-    '<rect width="' + W + '" height="' + H + '" fill="url(#bg)"/>',
-    img,
-    '<text x="260" y="125" font-family="sans-serif" font-size="22" font-weight="bold" fill="#ffffff">' + esc(title) + '</text>',
-    '<text x="260" y="155" font-family="sans-serif" font-size="15" fill="rgba(255,255,255,0.7)">' + esc(artist) + '</text>',
-    lyricsTag,
-    progressBarSVG(260, 300, barW, 4, pct, '#ffffff', 'rgba(255,255,255,0.2)', null),
-    '<text x="570" y="304" font-family="sans-serif" font-size="12" fill="rgba(255,255,255,0.6)">' + tCur + ' / ' + tTotal + '</text>',
-    '<text x="570" y="285" font-family="sans-serif" font-size="12" fill="rgba(255,255,255,0.6)">' + pct + '%</text>',
-    '</svg>',
-  ].join('\n');
+  parts.push(progressBarSVG(t.bar.x, t.bar.y, t.bar.w, t.bar.h, pct, t.bar.fill, t.bar.bg, t.bar.filter));
+  parts.push(textTag(t.time, tCur + ' / ' + tTotal));
+  parts.push(textTag(t.pct, pct + '%'));
+  parts.push('</svg>');
+
+  return parts.join('\n');
 }
 
 // ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export function buildSVG(track, lyricLine, imgBuf) {
-  switch (getUiTheme()) {
-    case 'cyberpunk': return buildCyberpunkSVG(track, lyricLine, imgBuf);
-    case 'minimal':   return buildMinimalSVG(track, lyricLine, imgBuf);
-    case 'retro':     return buildRetroSVG(track, lyricLine, imgBuf);
-    case 'gradient':  return buildGradientSVG(track, lyricLine, imgBuf);
-    default:          return null;
-  }
+  const theme = getUiTheme();
+  if (theme === 'classic' || !THEMES[theme]) return null;
+  return buildThemeSVG(theme, track, lyricLine, imgBuf);
 }
 
 export async function generateImage(track, lyricLine, imgBuf) {

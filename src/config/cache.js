@@ -11,7 +11,9 @@ export function readConfig() {
       _cache = JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
       return _cache;
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[Config] Error leyendo config:', err.message);
+  }
   return {};
 }
 

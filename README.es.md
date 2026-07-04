@@ -28,11 +28,15 @@ Sin API de Spotify. Sin Spotify Premium. Solo necesitas un Discord User Token.
 
 - **Letras en tiempo real** — cada línea aparece en el timestamp exacto del archivo LRC
 - **Múltiples fuentes de letras** — cadena de respaldo: LRCLIB → lyrics.ovh → AZLyrics
-- **Modo karaoke** — comando `!lyrics` muestra letras karaoke en tiempo real en un embed vivo
-- **Imágenes generadas** — `!np` renderiza una imagen cyberpunk con carátula, letras y progreso (solo Linux)
+- **Modo karaoke** — `!lyrics` / `/lyrics` muestra letras karaoke en tiempo real en un embed vivo
+- **Live + Karaoke fusionados** — si hay un canal en vivo configurado, activar karaoke lo transforma en un display de letras en tiempo real con actualizaciones cada 1.5s
+- **Imágenes generadas** — `!np` renderiza una imagen con carátula, letras y progreso (Linux)
 - **Temas visuales** — `!ui` cambia entre classic, cyberpunk, minimal, retro y gradient
 - **Canal en vivo** — `!np channel #canal` envía actualizaciones automáticas con imagen
 - **Formato por modo** — plantillas de formato distintas para lyrics/info/progress/compact
+- **Format overrides** — formato personalizado por artista, álbum o canción con `!format override`
+- **Estadísticas** — `!stats` muestra reproducciones totales, tiempo escuchado y top 5
+- **Comandos slash** — todos los comandos `!` también funcionan como `/` (inglés + español)
 - **Sin configuración** — al iniciar por primera vez abre un navegador para ingresar tu token
 - **Sin saltos de línea** — cola secuencial que reintenta automáticamente en rate limit
 - **Letras gratuitas** — LRCLIB + respaldos abiertos, sin API key
@@ -89,7 +93,7 @@ LyricScheduler        ← dispara cada línea en el timestamp correcto
       │
       ├── Discord PATCH API  → actualiza el estado personalizado
       ├── Webhook broadcast  → envía letras a cualquier webhook
-      └── Bot de control DM  → comandos: !np, !lyrics, !mode, !ui, etc.
+      └── Bot de control DM  → comandos: !np, !lyrics, !mode, !ui, etc. (+ comandos slash)
 ```
 
 ---
@@ -113,13 +117,17 @@ O crea un archivo `.env` para saltar la configuración del navegador:
 DISCORD_USER_TOKEN=your_discord_user_token_here
 CONTROL_BOT_TOKEN=your_discord_bot_token_here
 OWNER_ID=your_discord_user_id_here
+# Opcional: habilitar comandos slash
+CLIENT_ID=your_discord_application_id
+DEV_GUILD_ID=your_guild_id_for_instant_registration
 ```
 
 ---
 
 ## 🎮 Comandos del Bot de Control
 
-El bot de control (`control-bot.js`) es un bot de Discord separado para administrar la app por MD.
+El bot de control (`control-bot.js`) es un bot de Discord separado para administrar la app por MD.  
+**Todos los comandos también funcionan como comandos slash** — versiones en inglés y español disponibles.
 
 | Comando | Descripción |
 |---|---|
@@ -127,12 +135,13 @@ El bot de control (`control-bot.js`) es un bot de Discord separado para administ
 | `!mode <modo>` | Cambiar modo (lyrics / info / progress / compact) |
 | `!ui <tema>` | Cambiar tema visual (classic / cyberpunk / minimal / retro / gradient) |
 | `!np` | Mostrar canción actual con imagen generada |
-| `!lyrics` | Iniciar/detener karaoke en tiempo real |
+| `!lyrics` | Iniciar/detener karaoke en tiempo real (se fusiona con live channel si está configurado) |
 | `!repeat` | Repetir el embed de nowplaying |
 | `!status` | Mostrar estado del sistema |
 | `!prefix <texto>` | Establecer prefijo antes de las letras |
 | `!emoji <nombre>` | Establecer emoji del estado |
 | `!format [modo] <plantilla>` | Establecer plantilla de formato |
+| `!format override add\|remove\|list` | Formato personalizado por artista/álbum/canción |
 | `!style blocks\|squares` | Estilo de la barra de progreso |
 | `!cooldown <ms>` | Intervalo de polling (500–30000ms) |
 | `!filter add\|remove <palabra>` | Filtrar palabras de las letras |
@@ -140,6 +149,7 @@ El bot de control (`control-bot.js`) es un bot de Discord separado para administ
 | `!broadcast <url>` | Enviar letras a un webhook en tiempo real |
 | `!offset <ms>` | Ajustar sincronía de letras |
 | `!recent` | Mostrar canciones recientes |
+| `!stats` | Mostrar estadísticas de escucha (reproducciones, tiempo, top 5) |
 | `!logs` | Mostrar últimos logs de PM2 |
 | `!ping` | Latencia del bot |
 | `!help` | Mostrar todos los comandos |
@@ -198,9 +208,10 @@ src/
 ├── logger.js             — logger a archivo con marcas de tiempo ISO
 └── bot/
     ├── constants.js      — colores del bot, nombres de modo, definiciones de temas
-    ├── ui.js             — 50+ constructores de embeds y botones de Discord.js
+    ├── ui.js             — 55+ constructores de embeds y botones de Discord.js
     ├── image.js          — generador de imágenes SVG via sharp (5 temas)
-    ├── live.js           — actualizador del canal "Now Playing" en vivo con imagen
+    ├── commands.js       — definiciones de comandos slash y dispatcher (57 comandos, EN + ES)
+    ├── live.js           — actualizador del canal "Now Playing" en vivo con fusión karaoke
     ├── lyrics-live.js    — gestor de mensajes karaoke en tiempo real
     └── pm2.js            — wrapper de pm2 para gestión del proceso
 
@@ -208,12 +219,21 @@ control-bot.js            — bot de Discord separado para control remoto por MD
 debug-smtc.ps1            — script de diagnóstico SMTC (Windows)
 build.mjs                 — script de compilación con esbuild + pkg
 tests/
-├── cache.test.js
-├── crypto.test.js
-├── display.test.js
-├── lyrics.test.js
-├── settings.test.js
-└── tokens.test.js
+├── cache.test.js         — 4 tests
+├── crypto.test.js        — 6 tests
+├── deezer.test.js        — 5 tests
+├── display.test.js       — 10 tests
+├── image.test.js         — 9 tests
+├── live.test.js          — 4 tests
+├── linux.test.js         — 15 tests
+├── lyrics.test.js        — 5 tests
+├── lyrics-live.test.js   — 5 tests
+├── progress.test.js      — 8 tests
+├── scheduler.test.js     — 12 tests
+├── settings.test.js      — 26 tests
+├── spotify.test.js       — 5 tests
+├── status.test.js        — 5 tests
+└── tokens.test.js        — 9 tests
 ```
 
 ---
@@ -224,7 +244,7 @@ tests/
 npm test
 ```
 
-71+ tests que cubren configuración, cifrado, formato de texto, parseo de letras y gestión de tokens.
+146 tests en 15 archivos cubriendo configuración, cifrado, formato de texto, parseo de letras, generación de imágenes, scheduler, actualizaciones en vivo, karaoke, respaldo Deezer, estimación de progreso, parsing de D-Bus en Linux y gestión de tokens.
 
 ---
 

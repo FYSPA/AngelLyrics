@@ -17,4 +17,6 @@ export {
   getLiveChannelId, setLiveChannelId, getLiveMessageId, setLiveMessageId,
   getRecentTracks, addRecentTrack,
   getLyricOffset, setLyricOffset,
+  getFormatOverrides, setFormatOverride, removeFormatOverride, getMatchingOverride, getEffectiveFormat,
+  getStats, addTrackPlay, resetStats,
 } from './config/settings.js';

@@ -28,11 +28,15 @@ No Spotify API key. No Spotify Premium. No setup beyond a single Discord token.
 
 - **Real-time lyrics** — each line fires at the exact timestamp from the LRC file
 - **Multi-source lyrics** — LRCLIB (synced) → lyrics.ovh (plain) → AZLyrics (scraped) fallback chain
-- **Karaoke mode** — `!lyrics` command shows real-time karaoke lyrics in a live embed
-- **Generated images** — `!np` renders a cyberpunk-style image with album art, lyrics and progress (Linux)
+- **Karaoke mode** — `!lyrics` / `/lyrics` shows real-time karaoke lyrics in a live embed
+- **Live + Karaoke merge** — if a live channel is set, activating karaoke transforms it into a real-time lyric display with 1.5s updates
+- **Generated images** — `!np` renders a theme-aware image with album art, lyrics and progress (Linux)
 - **Customizable themes** — `!ui` switches between classic, cyberpunk, minimal, retro & gradient themes
 - **Live channel** — `!np channel #channel` sends automatic now-playing updates with image
 - **Per-mode format** — different status format templates for lyrics/info/progress/compact modes
+- **Format overrides** — per-artist, per-album or per-track format templates via `!format override`
+- **Listening stats** — `!stats` shows total plays, listening time and top tracks
+- **Slash commands** — all `!` commands also available as `/` commands (English + Spanish)
 - **Zero config** — first launch opens a browser setup page to enter your token
 - **No dropped lines** — a sequential queue retries on rate limits instead of skipping
 - **Free lyrics source** — LRCLIB + open fallbacks, no API key required
@@ -89,7 +93,7 @@ LyricScheduler        ← fires each line at the correct timestamp via polling
       │
       ├── Discord PATCH API  → updates custom status (queued, retried on 429)
       ├── Broadcast webhook  → pushes lyrics to any Discord webhook
-      └── Control bot DM     → commands: !np, !lyrics, !mode, !ui, etc.
+      └── Control bot DM     → commands: !np, !lyrics, !mode, !ui, etc. (+ slash commands)
 ```
 
 ---
@@ -113,13 +117,17 @@ Alternatively, create a `.env` file to skip the browser setup:
 DISCORD_USER_TOKEN=your_discord_user_token_here
 CONTROL_BOT_TOKEN=your_discord_bot_token_here
 OWNER_ID=your_discord_user_id_here
+# Optional: enable slash commands
+CLIENT_ID=your_discord_application_id
+DEV_GUILD_ID=your_guild_id_for_instant_registration
 ```
 
 ---
 
 ## 🎮 Control Bot Commands
 
-The control bot (`control-bot.js`) is a separate Discord bot that lets you manage the app via DM.
+The control bot (`control-bot.js`) is a separate Discord bot that lets you manage the app via DM.  
+**All commands also work as slash commands** — both English and Spanish versions are registered.
 
 | Command | Description |
 |---|---|
@@ -127,12 +135,13 @@ The control bot (`control-bot.js`) is a separate Discord bot that lets you manag
 | `!mode <mode>` | Switch display mode (lyrics / info / progress / compact) |
 | `!ui <theme>` | Switch visual theme (classic / cyberpunk / minimal / retro / gradient) |
 | `!np` | Show current track with generated image |
-| `!lyrics` | Start/stop real-time karaoke lyrics |
+| `!lyrics` | Start/stop real-time karaoke lyrics (merges into live channel if set) |
 | `!repeat` | Repeat the nowplaying embed |
 | `!status` | Show system status |
 | `!prefix <text>` | Set text prefix before lyrics |
 | `!emoji <name>` | Set status emoji |
 | `!format [mode] <template>` | Set status format template |
+| `!format override add\|remove\|list` | Per-artist/album/track format overrides |
 | `!style blocks\|squares` | Set progress bar style |
 | `!cooldown <ms>` | Set polling interval (500–30000ms) |
 | `!filter add\|remove <word>` | Filter words from lyrics |
@@ -140,6 +149,7 @@ The control bot (`control-bot.js`) is a separate Discord bot that lets you manag
 | `!broadcast <url>` | Push lyrics to a webhook in real time |
 | `!offset <ms>` | Fine-tune lyric sync offset |
 | `!recent` | Show recently played tracks |
+| `!stats` | Show listening statistics (total plays, time, top 5) |
 | `!logs` | Show last PM2 logs |
 | `!ping` | Show bot latency |
 | `!help` | Show all commands |
@@ -198,9 +208,10 @@ src/
 ├── logger.js             — file logger (ISO timestamps, log rotation)
 └── bot/
     ├── constants.js      — bot colors, mode names, theme definitions
-    ├── ui.js             — 50+ Discord.js embed & button builders
-    ├── image.js          — SVG image generator via sharp (theme-aware, 4 styles)
-    ├── live.js           — live "Now Playing" channel updater with image
+    ├── ui.js             — 55+ Discord.js embed & button builders
+    ├── image.js          — SVG image generator via sharp (theme-aware, 5 themes)
+    ├── commands.js       — slash command definitions & dispatcher (57 commands, EN + ES)
+    ├── live.js           — live "Now Playing" channel updater with karaoke merge
     ├── lyrics-live.js    — karaoke real-time lyrics message manager
     └── pm2.js            — pm2 process manager wrapper
 
@@ -208,12 +219,21 @@ control-bot.js            — separate Discord bot for remote control via DM
 debug-smtc.ps1            — standalone SMTC diagnostic script (Windows)
 build.mjs                 — esbuild + pkg build script
 tests/
-├── cache.test.js
-├── crypto.test.js
-├── display.test.js
-├── lyrics.test.js
-├── settings.test.js
-└── tokens.test.js
+├── cache.test.js         — 4 tests
+├── crypto.test.js        — 6 tests
+├── deezer.test.js        — 5 tests
+├── display.test.js       — 10 tests
+├── image.test.js         — 9 tests
+├── live.test.js          — 4 tests
+├── linux.test.js         — 15 tests
+├── lyrics.test.js        — 5 tests
+├── lyrics-live.test.js   — 5 tests
+├── progress.test.js      — 8 tests
+├── scheduler.test.js     — 12 tests
+├── settings.test.js      — 26 tests
+├── spotify.test.js       — 5 tests
+├── status.test.js        — 5 tests
+└── tokens.test.js        — 9 tests
 ```
 
 ---
@@ -224,7 +244,7 @@ tests/
 npm test
 ```
 
-71+ tests covering config, crypto, display formatting, lyrics parsing, and token management.
+146 tests across 15 files covering config, crypto, display formatting, lyrics parsing, image generation, scheduler, live updates, karaoke, Deezer fallback, progress estimation, Linux D-Bus parsing, and token management.
 
 ---
 

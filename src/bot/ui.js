@@ -1,7 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
 import { COLORS, MODE_NAMES, VALID_MODES, SO_ACTUAL, VALID_UI_THEMES, THEME_COLORS } from './constants.js';
 import { getDisplayMode, getBackend, VALID_FORMAT_VARS, DEFAULT_FORMATS, getStatusFormat, getUiTheme } from '../config.js';
-import { LIVE_UPDATE_INTERVAL_MS } from '../constants.js';
+import { LIVE_UPDATE_INTERVAL_MS, PROGRESS_BAR_WIDTH_EMBED, PROGRESS_BAR_WIDTH_KARAOKE } from '../constants.js';
 
 const FOOTER = 'AngelLyrics \u00B7 !help para comandos';
 
@@ -32,6 +32,7 @@ export function controlRow() {
     new ButtonBuilder().setCustomId('cmd_off').setLabel('Apagar').setStyle(ButtonStyle.Danger).setEmoji('\u23F9\uFE0F'),
     new ButtonBuilder().setCustomId('cmd_restart').setLabel('Reiniciar').setStyle(ButtonStyle.Primary).setEmoji('\uD83D\uDD04'),
     new ButtonBuilder().setCustomId('cmd_status').setLabel('Estado').setStyle(ButtonStyle.Secondary).setEmoji('\uD83D\uDCCA'),
+    new ButtonBuilder().setCustomId('cmd_repeat').setLabel('Repetir').setStyle(ButtonStyle.Secondary).setEmoji('\uD83D\uDD01'),
   );
 }
 
@@ -122,7 +123,7 @@ export function nowplayingEmbed(np) {
   const theme = getUiTheme();
   const themeColor = (THEME_COLORS[theme] || THEME_COLORS.classic).embed;
   const pct = np.durationMs > 0 ? Math.round((np.progressMs / np.durationMs) * 100) : 0;
-  const barWidth = 12;
+  const barWidth = PROGRESS_BAR_WIDTH_EMBED;
   const filled = Math.round((pct / 100) * barWidth);
   const bar = '\u25B0'.repeat(filled) + '\u25B1'.repeat(barWidth - filled);
 
@@ -203,12 +204,21 @@ export function helpEmbed() {
       },
       {
         name: 'Configuraci\u00F3n',
-        value: '`!mode` / `!backend` / `!ui` / `!prefix` / `!emoji` / `!style` / `!cooldown` / `!filter` / `!blacklist` / `!format` / `!offset` / `!broadcast` / `!np channel`',
+        value: '`!mode` / `!backend` / `!ui` / `!prefix` / `!emoji` / `!style` / `!cooldown` / `!filter` / `!blacklist` / `!format` / `!format override` / `!offset` / `!broadcast` / `!np channel`',
+        inline: false,
+      },
+      {
+        name: 'Estad\u00EDsticas',
+        value: '`!stats` \u2014 Ver estad\u00EDsticas de escucha\n`!stats reset` \u2014 Reiniciar datos',
         inline: false,
       },
       {
         name: 'Modos de visualizaci\u00F3n',
         value: '- `lyrics` \u2014 Letra sincronizada\n- `info` \u2014 Info de canci\u00F3n\n- `progress` \u2014 Barra de progreso\n- `compact` \u2014 Barra + tiempo + canci\u00F3n',
+      },
+      {
+        name: 'Generaci\u00F3n de im\u00E1genes',
+        value: '`!np` genera una imagen con car\u00E1tula y letra en **Linux** con tema visual no-cl\u00E1sico. Cambia con `!ui`.',
       },
     );
 }
@@ -398,6 +408,49 @@ export function formatResetEmbed(mode) {
   return embed(COLORS.GREEN, 'Formato restablecido', 'Formato ' + label + ' vuelto al predeterminado.');
 }
 
+export function formatOverrideAddedEmbed(type, name, template) {
+  var preview = template.replace(/{(\w+)}/g, '`{$1}`');
+  return embed(COLORS.GREEN, 'Override a\u00F1adido', 'Para **' + type + ': ' + name + '**\nFormato: `' + template + '`\n\nPreview: ' + preview);
+}
+
+export function formatOverrideRemovedEmbed(type, name) {
+  return embed(COLORS.GREEN, 'Override eliminado', 'Para **' + type + ': ' + name + '**');
+}
+
+export function formatOverrideListEmbed(overrides) {
+  var keys = Object.keys(overrides);
+  if (!keys.length) {
+    return embed(COLORS.PURPLE, 'Format overrides', 'No hay overrides configurados.\n\nUsa `!format override add <artist|album|track> <nombre> <template>`');
+  }
+  var desc = keys.map(function (k) { return '- `' + k + '`: ' + overrides[k]; }).join('\n');
+  return embed(COLORS.PURPLE, 'Format overrides (' + keys.length + ')', desc);
+}
+
+// ── Statistics ───────────────────────────────────────────────────────────────
+
+export function statsEmbed(stats) {
+  if (!stats || !stats.totalTracks) {
+    return embed(COLORS.GREY, 'Estad\u00EDsticas', 'No hay datos de escucha todav\u00EDa.');
+  }
+  var tracks = Object.values(stats.tracks).sort(function (a, b) { return b.count - a.count; });
+  var top5 = tracks.slice(0, 5).map(function (t, i) {
+    var plays = t.count + 'x';
+    return '`' + (i + 1) + '.` **' + t.name + '** \u2014 ' + t.artist + ' (' + plays + ')';
+  }).join('\n') || '(sin datos)';
+
+  var totalHours = Math.round(stats.totalTimeMs / 3600000);
+  var desc = '**Canciones reproducidas:** ' + stats.totalTracks + '\n';
+  desc += '**Tiempo total:** ~' + totalHours + 'h\n';
+  desc += '**Canciones \u00FAnicas:** ' + Object.keys(stats.tracks).length + '\n\n';
+  desc += '**M\u00E1s escuchadas:**\n' + top5;
+
+  return embed(COLORS.SPOTIFY_GREEN, 'Estad\u00EDsticas de escucha', desc);
+}
+
+export function statsResetEmbed() {
+  return embed(COLORS.RED, 'Estad\u00EDsticas reiniciadas', 'Todos los datos de escucha han sido borrados.');
+}
+
 // ── Offset ───────────────────────────────────────────────────────────────────
 
 export function offsetInfoEmbed(current) {
@@ -469,7 +522,7 @@ export function karaokeEmbed(np) {
 
   const desc = parts.join('\n');
   const pct = np.durationMs > 0 ? Math.round((np.progressMs / np.durationMs) * 100) : 0;
-  const barWidth = 10;
+  const barWidth = PROGRESS_BAR_WIDTH_KARAOKE;
   const filled = Math.round((pct / 100) * barWidth);
   const bar = '\u25B0'.repeat(filled) + '\u25B1'.repeat(barWidth - filled);
   const tCur = formatTime(np.progressMs);

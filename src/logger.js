@@ -25,7 +25,9 @@ function writeLog(level, args) {
     const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
     const line = `[${timestamp()}] [${level}] ${msg}\n`;
     appendFileSync(getLogPath(), line, 'utf8');
-  } catch {}
+  } catch (err) {
+    process.stderr.write(`[Logger] Error escribiendo log: ${err.message}\n`);
+  }
 }
 
 function cleanupOldLogs() {
@@ -37,10 +39,14 @@ function cleanupOldLogs() {
       if (!f.endsWith('.log')) continue;
       const fileDate = f.slice(0, 10);
       if (fileDate < cutoff) {
-        try { unlinkSync(join(LOG_DIR, f)); } catch {}
+        try { unlinkSync(join(LOG_DIR, f)); } catch (err) {
+          process.stderr.write(`[Logger] Error eliminando log antiguo: ${err.message}\n`);
+        }
       }
     }
-  } catch {}
+  } catch (err) {
+    process.stderr.write(`[Logger] Error en limpieza de logs: ${err.message}\n`);
+  }
 }
 
 export function readRecentLogs(lines = 50) {

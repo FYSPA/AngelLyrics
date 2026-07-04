@@ -273,3 +273,71 @@ export function setLyricOffset(ms) {
   writeConfig(updated);
   console.log(`[Config] Offset de letras cambiado a: ${n}ms`);
 }
+
+// ── Format overrides (per artist / album / track) ───────────────────────────
+
+const OVERRIDE_PREFIXES = { artist: 'artist:', album: 'album:', track: 'track:' };
+
+export function getFormatOverrides() {
+  return readConfig().formatOverrides || {};
+}
+
+export function setFormatOverride(type, name, template) {
+  const key = (OVERRIDE_PREFIXES[type] || '') + name;
+  const updated = readConfig();
+  if (!updated.formatOverrides) updated.formatOverrides = {};
+  if (template === null || template === undefined) {
+    delete updated.formatOverrides[key];
+    console.log(`[Config] Formato override eliminado: ${key}`);
+  } else {
+    updated.formatOverrides[key] = template;
+    console.log(`[Config] Formato override añadido: ${key} = "${template}"`);
+  }
+  writeConfig(updated);
+}
+
+export function removeFormatOverride(type, name) {
+  setFormatOverride(type, name, null);
+}
+
+export function getMatchingOverride(trackName, artistName, albumName) {
+  const overrides = getFormatOverrides();
+  if (!Object.keys(overrides).length) return null;
+  if (trackName && overrides['track:' + trackName]) return overrides['track:' + trackName];
+  if (albumName && overrides['album:' + albumName]) return overrides['album:' + albumName];
+  if (artistName && overrides['artist:' + artistName]) return overrides['artist:' + artistName];
+  return null;
+}
+
+export function getEffectiveFormat(mode, trackName, artistName, albumName) {
+  const override = getMatchingOverride(trackName, artistName, albumName);
+  if (override) return override;
+  return getStatusFormat(mode);
+}
+
+// ── Statistics ───────────────────────────────────────────────────────────────
+
+export function getStats() {
+  return readConfig().stats || { totalTracks: 0, totalTimeMs: 0, tracks: {} };
+}
+
+export function addTrackPlay(trackId, trackName, artistName, durationMs) {
+  const updated = readConfig();
+  if (!updated.stats) updated.stats = { totalTracks: 0, totalTimeMs: 0, tracks: {} };
+  const s = updated.stats;
+  s.totalTracks++;
+  s.totalTimeMs += durationMs;
+  if (!s.tracks[trackId]) {
+    s.tracks[trackId] = { name: trackName, artist: artistName, count: 0, totalTimeMs: 0 };
+  }
+  s.tracks[trackId].count++;
+  s.tracks[trackId].totalTimeMs += durationMs;
+  writeConfig(updated);
+}
+
+export function resetStats() {
+  const updated = readConfig();
+  updated.stats = { totalTracks: 0, totalTimeMs: 0, tracks: {} };
+  writeConfig(updated);
+  console.log('[Config] Estadísticas reiniciadas.');
+}

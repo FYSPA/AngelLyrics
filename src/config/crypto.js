@@ -1,11 +1,23 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { hostname } from 'os';
 import { APP_NAME } from './paths.js';
+import { readConfig, writeConfig } from './cache.js';
 
 const ALGORITHM = 'aes-256-gcm';
 
+function getOrCreateSalt() {
+  let cfg = readConfig();
+  if (cfg._cryptoSalt) return cfg._cryptoSalt;
+  const salt = randomBytes(16).toString('hex');
+  cfg = readConfig();
+  cfg._cryptoSalt = salt;
+  writeConfig(cfg);
+  return salt;
+}
+
 function deriveKey() {
-  return createHash('sha256').update(hostname() + '::' + APP_NAME).digest();
+  const salt = getOrCreateSalt();
+  return createHash('sha256').update(salt + hostname() + '::' + APP_NAME).digest();
 }
 
 export function encryptToken(plaintext) {
@@ -33,6 +45,8 @@ export function decryptToken(stored) {
       return decrypted;
     }
     if (typeof stored === 'string') return stored;
-  } catch {}
+  } catch (err) {
+    console.error('[Crypto] Error desencriptando token:', err.message);
+  }
   return null;
 }

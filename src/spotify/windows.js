@@ -1,4 +1,4 @@
-import { runCommand, makeTrackId } from './utils.js';
+import { runCommand, makeTrackId, fetchAlbumArtFromDeezer } from './utils.js';
 import { estimateProgress } from './progress.js';
 
 const SMTC_SCRIPT = `
@@ -41,6 +41,8 @@ export async function getCurrentTrackWindows() {
       const data = JSON.parse(trimmed);
       if (!data || data === 'null' || !data.title) return null;
       const trackId = makeTrackId(data.title, data.artist);
+      let albumArtUrl = '';
+      try { albumArtUrl = await fetchAlbumArtFromDeezer(data.title, data.artist); } catch {}
       return {
         isPlaying: data.playbackStatus === 'Playing',
         trackId,
@@ -49,9 +51,11 @@ export async function getCurrentTrackWindows() {
         albumName: data.album || '',
         progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
         durationMs: data.durationMs || 0,
-        albumArtUrl: '',
+        albumArtUrl,
       };
-    } catch {}
+    } catch (err) {
+      console.warn('[Windows] Error parseando salida SMTC:', err.message);
+    }
   }
   return null;
 }

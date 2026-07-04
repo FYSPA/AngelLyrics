@@ -1,25 +1,5 @@
-import { runCommand, makeTrackId } from './utils.js';
+import { runCommand, makeTrackId, fetchAlbumArtFromDeezer } from './utils.js';
 import { estimateProgress } from './progress.js';
-
-const _deezerUrlCache = new Map();
-
-async function fetchAlbumArtFromDeezer(trackName, artistName) {
-  const key = `${trackName}::${artistName}`.toLowerCase();
-  if (_deezerUrlCache.has(key)) return _deezerUrlCache.get(key);
-
-  try {
-    const q = encodeURIComponent(`artist:"${artistName}" track:"${trackName}"`);
-    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
-    if (!res.ok) { _deezerUrlCache.set(key, ''); return ''; }
-    const data = await res.json();
-    const url = data?.data?.[0]?.album?.cover_medium || '';
-    _deezerUrlCache.set(key, url);
-    return url;
-  } catch {
-    _deezerUrlCache.set(key, '');
-    return '';
-  }
-}
 
 async function listDbusServices() {
   const raw = await runCommand('dbus-send', [

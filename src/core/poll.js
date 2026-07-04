@@ -7,9 +7,10 @@ import { LyricScheduler } from './scheduler.js';
 import { CONFIG_DIR } from '../config/paths.js';
 import { refreshConfig } from '../config/cache.js';
 import { getToken } from '../config/tokens.js';
-import { getDisplayMode, setDisplayMode, getCooldownMs, getBlacklist, getBroadcastWebhook, getLyricOffset, addRecentTrack } from '../config/settings.js';
+import { getDisplayMode, setDisplayMode, getCooldownMs, getBlacklist, getBroadcastWebhook, getLyricOffset, addRecentTrack, addTrackPlay } from '../config/settings.js';
 import { SEEK_THRESHOLD_MS } from '../constants.js';
-import { showTrackInfo, showProgress, showCompact, onLineChange } from './display.js';
+import { showTrackInfo, showProgress, showCompact, onLineChange, resetBroadcastDedup } from './display.js';
+import { resetProgressTracking } from '../spotify/progress.js';
 
 const NOWPLAYING_FILE = join(CONFIG_DIR, 'nowplaying.json');
 
@@ -46,7 +47,9 @@ function saveNowplaying() {
       lyricIndex: currentLyricIndex,
     };
     writeFileSync(NOWPLAYING_FILE, JSON.stringify(data), 'utf8');
-  } catch {}
+  } catch (err) {
+    console.error('[Poll] Error guardando nowplaying.json:', err.message);
+  }
 }
 
 function applyDisplayMode(newMode) {
@@ -150,6 +153,7 @@ async function poll() {
 
     if (track.trackId !== currentTrackId) {
       console.log(`[Principal] Canción cambiada → "${track.trackName}" de ${track.artistName}`);
+      resetBroadcastDedup();
 
       currentTrackId = track.trackId;
       currentTrackName = track.trackName;
@@ -164,13 +168,14 @@ async function poll() {
       if (scheduler) { scheduler.stop(); scheduler = null; }
 
       addRecentTrack({ trackName: track.trackName, artistName: track.artistName, albumName: track.albumName });
+      addTrackPlay(track.trackId || 'unknown', track.trackName, track.artistName, track.durationMs);
 
       if (displayMode === 'info') {
         showTrackInfo(currentTrackName, currentArtistName, currentAlbumName, 'info');
       } else if (displayMode === 'progress') {
-        showProgress(track.progressMs, currentDurationMs, 'progress');
+        showProgress(track.progressMs, currentDurationMs, 'progress', currentTrackName, currentArtistName, currentAlbumName);
       } else if (displayMode === 'compact') {
-        showCompact(track.progressMs, currentDurationMs, currentTrackName, 'compact');
+        showCompact(track.progressMs, currentDurationMs, currentTrackName, 'compact', currentArtistName, currentAlbumName);
       } else {
         lastProgressMs = track.progressMs;
         showProgress(track.progressMs, currentDurationMs, 'lyrics');
@@ -180,11 +185,11 @@ async function poll() {
 
         if (lyrics && lyrics.length > 0) {
           const adjustedMs = Math.max(0, track.progressMs + (Date.now() - trackFetchedAt) + getLyricOffset());
-          scheduler = new LyricScheduler(lyrics, (line) => {
+          scheduler = new LyricScheduler(lyrics, (line, index) => {
             currentLyricLine = line.text || '';
-            currentLyricIndex = currentLyricLines.indexOf(line);
+            currentLyricIndex = index;
             saveNowplaying();
-            onLineChange(line, displayMode);
+            onLineChange(line, displayMode, currentTrackName, currentArtistName, currentAlbumName);
           });
           scheduler.start(adjustedMs);
         } else {

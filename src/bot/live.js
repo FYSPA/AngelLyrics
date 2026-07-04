@@ -1,20 +1,20 @@
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
-import { CONFIG_DIR, getLiveChannelId, setLiveChannelId, getLiveMessageId, setLiveMessageId, getUiTheme } from '../config.js';
+import { getLiveChannelId, setLiveChannelId, getLiveMessageId, setLiveMessageId, getUiTheme } from '../config.js';
 import { LIVE_UPDATE_INTERVAL_MS } from '../constants.js';
-import { nowplayingEmbed, noMusicEmbed } from './ui.js';
+import { nowplayingEmbed, karaokeEmbed, noMusicEmbed } from './ui.js';
 import { canGenerate, fetchImage, generateImage } from './image.js';
+import { readNowplaying } from '../core/nowplaying.js';
+
+const KARAOKE_INTERVAL_MS = 1500;
 
 let liveInterval = null;
+let _karaokeMode = false;
 
-function readNowplaying() {
-  try {
-    const file = join(CONFIG_DIR, 'nowplaying.json');
-    if (!existsSync(file)) return null;
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
+export function isKaraokeMode() {
+  return _karaokeMode;
+}
+
+export function setKaraokeMode(active) {
+  _karaokeMode = active;
 }
 
 export function stopLiveUpdates() {
@@ -27,7 +27,8 @@ export function stopLiveUpdates() {
 export function startLiveUpdates(client) {
   stopLiveUpdates();
   updateLiveMessage(client);
-  liveInterval = setInterval(() => updateLiveMessage(client), LIVE_UPDATE_INTERVAL_MS);
+  const interval = _karaokeMode ? KARAOKE_INTERVAL_MS : LIVE_UPDATE_INTERVAL_MS;
+  liveInterval = setInterval(() => updateLiveMessage(client), interval);
 }
 
 async function updateLiveMessage(client) {
@@ -49,10 +50,17 @@ async function updateLiveMessage(client) {
   }
 
   const np = readNowplaying();
-  const embed = np && np.trackName ? nowplayingEmbed(np) : noMusicEmbed();
+  if (!np || !np.trackName) {
+    const embed = noMusicEmbed();
+    const msgOpts = { embeds: [embed] };
+    await sendOrEdit(channel, msgOpts);
+    return;
+  }
+
+  const embed = _karaokeMode ? karaokeEmbed(np) : nowplayingEmbed(np);
   const msgOpts = { embeds: [embed], files: [] };
 
-  if (np && np.trackName && canGenerate() && getUiTheme() !== 'classic') {
+  if (!_karaokeMode && np.trackName && canGenerate() && getUiTheme() !== 'classic') {
     try {
       const artBuf = await fetchImage(np.albumArtUrl);
       const pngBuf = await generateImage(np, np.lyricLine || '', artBuf);
@@ -65,15 +73,18 @@ async function updateLiveMessage(client) {
     }
   }
 
-  const msgId = getLiveMessageId();
+  await sendOrEdit(channel, msgOpts);
+}
 
+async function sendOrEdit(channel, msgOpts) {
+  const msgId = getLiveMessageId();
   if (msgId) {
     try {
       const msg = await channel.messages.fetch(msgId);
       await msg.edit(msgOpts);
       return;
     } catch {
-      // mensaje eliminado o no encontrado
+      // message deleted or not found
     }
   }
 

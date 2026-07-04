@@ -14,7 +14,7 @@ export class LyricScheduler {
   /** @type {Array<{timeMs: number, text: string}>} */
   #lyrics = [];
 
-  /** @type {(line: {timeMs: number, text: string}) => void} */
+  /** @type {(line: {timeMs: number, text: string}, index: number) => void} */
   #onLineChange;
 
   /** @type {ReturnType<typeof setInterval>|null} */
@@ -103,7 +103,7 @@ export class LyricScheduler {
     if (idx === this.#currentIndex) return;
 
     this.#currentIndex = idx;
-    this.#onLineChange(this.#lyrics[idx]);
+    this.#onLineChange(this.#lyrics[idx], idx);
   }
 
   /**

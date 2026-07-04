@@ -1,31 +1,30 @@
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
-import { CONFIG_DIR } from '../config/paths.js';
 import { karaokeEmbed, noMusicEmbed } from './ui.js';
+import { readNowplaying } from '../core/nowplaying.js';
+import { getLiveChannelId } from '../config.js';
+import { setKaraokeMode, isKaraokeMode } from './live.js';
 
 const POLL_MS = 1500;
-const NOWPLAYING_FILE = join(CONFIG_DIR, 'nowplaying.json');
 
 let karaokeInterval = null;
 let karaokeChannelId = '';
 let karaokeMessageId = '';
 let lastIndex = -1;
-
-function readNowplaying() {
-  try {
-    if (!existsSync(NOWPLAYING_FILE)) return null;
-    return JSON.parse(readFileSync(NOWPLAYING_FILE, 'utf8'));
-  } catch {
-    return null;
-  }
-}
+let _delegatedToLive = false;
 
 export function isKaraokeActive() {
-  return karaokeInterval !== null;
+  return karaokeInterval !== null || _delegatedToLive;
 }
 
 export function startKaraoke(client, channelId) {
   stopKaraoke();
+
+  const liveChannelId = getLiveChannelId();
+  if (liveChannelId && channelId === liveChannelId) {
+    _delegatedToLive = true;
+    setKaraokeMode(true);
+    return;
+  }
+
   karaokeChannelId = channelId;
   karaokeMessageId = '';
   lastIndex = -1;
@@ -34,6 +33,12 @@ export function startKaraoke(client, channelId) {
 }
 
 export function stopKaraoke() {
+  if (_delegatedToLive) {
+    _delegatedToLive = false;
+    setKaraokeMode(false);
+    return;
+  }
+
   if (karaokeInterval) {
     clearInterval(karaokeInterval);
     karaokeInterval = null;
@@ -80,7 +85,8 @@ async function updateKaraoke(client) {
       const msg = await channel.messages.fetch(karaokeMessageId);
       await msg.edit({ embeds: [embed] });
       return;
-    } catch {
+    } catch (err) {
+      console.warn('[Karaoke] Error editando mensaje:', err.message);
       karaokeMessageId = '';
     }
   }

@@ -1,6 +1,6 @@
-import { getPrefix, getStatusEmoji, getFilteredWords, getProgressStyle, getStatusFormat, getBroadcastWebhook } from '../config/settings.js';
+import { getPrefix, getStatusEmoji, getFilteredWords, getProgressStyle, getStatusFormat, getBroadcastWebhook, getEffectiveFormat } from '../config/settings.js';
 import { setCustomStatus } from '../status.js';
-import { LYRIC_MIN_LENGTH } from '../constants.js';
+import { LYRIC_MIN_LENGTH, PROGRESS_BAR_WIDTH_STATUS, PROGRESS_BAR_WIDTH_COMPACT } from '../constants.js';
 
 export function formatStatusText(template, data) {
   if (!template) return '';
@@ -49,7 +49,7 @@ export function showTrackInfo(trackName, artistName, albumName, mode) {
   const prefix = getPrefix();
   const emoji = getStatusEmoji();
   const emojiStr = emoji === 'none' ? '' : emoji;
-  const custom = getStatusFormat(mode);
+  const custom = getEffectiveFormat(mode, trackName, artistName, albumName);
   const text = custom
     ? formatStatusText(custom, { title: trackName, artist: artistName, album: albumName || '', prefix, emoji: emojiStr, progress: '', timeCur: '', timeTotal: '', time: '', lyrics: '' })
     : `${prefix}${trackName} — ${artistName}`;
@@ -57,11 +57,11 @@ export function showTrackInfo(trackName, artistName, albumName, mode) {
   setCustomStatus(text, emojiStr);
 }
 
-export function showProgress(progressMs, durationMs, mode) {
+export function showProgress(progressMs, durationMs, mode, trackName, artistName, albumName) {
   if (!progressMs || durationMs <= 0) return;
 
   const pct = Math.min(100, Math.round((progressMs / durationMs) * 100));
-  const barWidth = 10;
+  const barWidth = PROGRESS_BAR_WIDTH_STATUS;
   const filled = Math.round((pct / 100) * barWidth);
   const bar = makeProgressBar(filled, barWidth);
   const timeCur = formatTime(progressMs);
@@ -70,31 +70,31 @@ export function showProgress(progressMs, durationMs, mode) {
   const prefix = getPrefix();
   const emoji = getStatusEmoji();
   const emojiStr = emoji === 'none' ? '' : emoji;
-  const custom = getStatusFormat(mode);
+  const custom = getEffectiveFormat(mode, trackName, artistName, albumName);
 
   const text = custom
-    ? formatStatusText(custom, { title: '', artist: '', album: '', prefix, emoji: emojiStr, progress: bar, timeCur, timeTotal, time, lyrics: '' })
+    ? formatStatusText(custom, { title: trackName || '', artist: artistName || '', album: albumName || '', prefix, emoji: emojiStr, progress: bar, timeCur, timeTotal, time, lyrics: '' })
     : `${prefix}${bar} ${time}`;
 
   console.log(`[Progreso] ${text}`);
   setCustomStatus(text, emojiStr);
 }
 
-export function showCompact(progressMs, durationMs, trackName, mode) {
+export function showCompact(progressMs, durationMs, trackName, mode, artistName, albumName) {
   if (!progressMs || durationMs <= 0) return;
 
   const pct = Math.min(100, Math.round((progressMs / durationMs) * 100));
-  const barWidth = 6;
+  const barWidth = PROGRESS_BAR_WIDTH_COMPACT;
   const filled = Math.round((pct / 100) * barWidth);
   const bar = makeProgressBar(filled, barWidth);
   const timeCur = formatTime(progressMs);
   const prefix = getPrefix();
   const emoji = getStatusEmoji();
   const emojiStr = emoji === 'none' ? '' : emoji;
-  const custom = getStatusFormat(mode);
+  const custom = getEffectiveFormat(mode, trackName, artistName, albumName);
 
   const raw = custom
-    ? formatStatusText(custom, { title: trackName, artist: '', album: '', prefix, emoji: emojiStr, progress: bar, timeCur, timeTotal: '', time: '', lyrics: '' })
+    ? formatStatusText(custom, { title: trackName, artist: artistName || '', album: albumName || '', prefix, emoji: emojiStr, progress: bar, timeCur, timeTotal: '', time: '', lyrics: '' })
     : `${prefix}${bar} ${timeCur} ${trackName}`;
   const text = raw.slice(0, 128);
 
@@ -102,7 +102,7 @@ export function showCompact(progressMs, durationMs, trackName, mode) {
   setCustomStatus(text, emojiStr);
 }
 
-export function onLineChange(line, displayMode) {
+export function onLineChange(line, displayMode, trackName, artistName, albumName) {
   if (displayMode !== 'lyrics') return;
 
   const rawText = line.text?.trim() || '';
@@ -111,7 +111,7 @@ export function onLineChange(line, displayMode) {
   const prefix = getPrefix();
   const emoji = getStatusEmoji();
   const emojiStr = emoji === 'none' ? '' : emoji;
-  const custom = getStatusFormat(displayMode);
+  const custom = getEffectiveFormat(displayMode, trackName, artistName, albumName);
 
   const text = custom
     ? formatStatusText(custom, { title: '', artist: '', album: '', prefix, emoji: emojiStr, progress: '', timeCur: '', timeTotal: '', time: '', lyrics: displayText })
@@ -134,5 +134,11 @@ export async function broadcastLine(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: text }),
     });
-  } catch {}
+  } catch (err) {
+    console.error('[Broadcast] Error enviando:', err.message);
+  }
+}
+
+export function resetBroadcastDedup() {
+  lastBroadcastLine = '';
 }
