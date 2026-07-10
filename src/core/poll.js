@@ -27,6 +27,7 @@ let scheduler = null;
 let lastProgressMs = 0;
 let lastPollTime = 0;
 let lastRawProgressMs = 0;
+let trackStartTime = 0;
 let displayMode = getDisplayMode();
 let _polling = false;
 let pollInterval = null;
@@ -157,6 +158,7 @@ async function poll() {
       resetBroadcastDedup();
 
       currentTrackId = track.trackId;
+      trackStartTime = Date.now();
       currentTrackName = track.trackName;
       currentArtistName = track.artistName;
       currentAlbumName = track.albumName;
@@ -185,7 +187,7 @@ async function poll() {
         currentLyricLines = lyrics || [];
 
         if (lyrics && lyrics.length > 0) {
-          const adjustedMs = Math.max(0, track.progressMs + getLyricOffset());
+          const adjustedMs = Math.max(0, (track.rawProgressMs !== undefined ? (Date.now() - trackStartTime) : track.progressMs) + getLyricOffset());
           scheduler = new LyricScheduler(lyrics, (line, index) => {
             currentLyricLine = line.text || '';
             currentLyricIndex = index;
@@ -219,7 +221,7 @@ async function poll() {
         console.log(
           `[Principal] Salto detectado (desfase ${(drift / 1000).toFixed(1)}s). Resincronizando letras.`
         );
-        const restartMs = Math.max(0, track.progressMs + getLyricOffset());
+        const restartMs = Math.max(0, (track.rawProgressMs !== undefined ? (Date.now() - trackStartTime) : track.progressMs) + getLyricOffset());
         scheduler.restart(restartMs);
         saveNowplaying();
       }
