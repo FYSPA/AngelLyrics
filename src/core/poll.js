@@ -235,16 +235,19 @@ async function poll() {
             console.log(`[Principal] Posición SMTC estancada (Δ${rawPosDelta}ms en ${elapsed}ms)`);
             lastLoggedRawDelta = rawPosDelta;
           }
-        } else if (drift > SEEK_THRESHOLD_MS) {
-          console.log(
-            `[Principal] Salto detectado (desfase ${(drift / 1000).toFixed(1)}s). Resincronizando letras.`
-          );
+        } else {
           const restartMs = Math.max(0, track.progressMs + getLyricOffset());
-          scheduler.restart(restartMs);
-          saveNowplaying();
+          const currentPos = scheduler.estimatedProgressMs;
+          if (drift > SEEK_THRESHOLD_MS || Math.abs(restartMs - currentPos) > 2000) {
+            console.log(
+              `[Principal] Resincronizando: prog=${Math.round(track.progressMs)}ms sched=${Math.round(currentPos)}ms`
+            );
+            scheduler.restart(restartMs);
+            saveNowplaying();
+          }
         }
       }
-          }
+    }
 
     lastRawProgressMs = track.rawProgressMs ?? track.progressMs;
 
