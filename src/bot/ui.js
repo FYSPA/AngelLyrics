@@ -580,6 +580,80 @@ export function logsEmbed(text, source) {
     .setFooter({ text: (source || 'pm2') + ' \u00B7 ' + FOOTER });
 }
 
+// ── Diagnóstico ─────────────────────────────────────────────────────────────
+
+export function diagnosticEmbed(np) {
+  const theme = getUiTheme();
+  const themeColor = (THEME_COLORS[theme] || THEME_COLORS.classic).embed;
+  const durationSec = np.durationMs ? (np.durationMs / 1000).toFixed(1) : '?';
+  const progressSec = np.progressMs ? (np.progressMs / 1000).toFixed(1) : '0.0';
+
+  const pct = np.durationMs > 0 ? Math.min(100, Math.round((np.progressMs / np.durationMs) * 100)) : 0;
+  const barWidth = 10;
+  const filled = Math.round((pct / 100) * barWidth);
+  const bar = '\u25B0'.repeat(filled) + '\u25B1'.repeat(barWidth - filled);
+
+  let rawInfo = 'N/A';
+  let driftInfo = 'N/A';
+  if (np.lastRawProgressMs != null) {
+    const rawSec = (np.lastRawProgressMs / 1000).toFixed(1);
+    const now = Date.now();
+    const elapsed = np.lastPollTime ? (now - np.lastPollTime) : 0;
+    const stalled = elapsed > 1000 && elapsed > 0;
+    rawInfo = `${rawSec}s` + (stalled ? ' (\u274C estancada)' : '');
+    if (np.progressMs && np.lastRawProgressMs >= 0) {
+      const driftSec = ((np.progressMs - np.lastRawProgressMs) / 1000).toFixed(1);
+      driftInfo = `${driftSec}s`;
+    }
+  }
+
+  const lines = np.lyricLines || [];
+  const idx = np.lyricIndex != null ? np.lyricIndex : -1;
+  const totalLines = lines.length;
+
+  let currentLine = 'N/A';
+  let nextLine = 'N/A';
+  if (idx >= 0 && idx < lines.length) {
+    currentLine = 'L' + (idx + 1) + '/' + totalLines + ' \u2014 ' + (lines[idx].text || '');
+  } else if (totalLines > 0) {
+    currentLine = 'Esperando letra\u2026';
+  }
+  if (idx + 1 < lines.length) {
+    const remaining = Math.max(0, Math.round((lines[idx + 1].timeMs - np.progressMs) / 100) * 100 / 1000);
+    nextLine = 'L' + (idx + 2) + ' en ' + remaining.toFixed(1) + 's \u2014 ' + (lines[idx + 1].text || '');
+  } else if (totalLines > 0) {
+    nextLine = '(final de la canci\u00F3n)';
+  }
+
+  const desc = [
+    '**' + np.trackName + '** \u2014 ' + np.artistName,
+    'Duraci\u00F3n: ' + formatTime(np.durationMs),
+    '',
+    '\u2014\u2014 POSICI\u00D3N \u2014\u2014',
+    'Scheduler:  ' + progressSec + 's / ' + durationSec + 's  (' + pct + '%)  \u2190\u2011' + bar,
+    'SMTC crudo: ' + rawInfo,
+    'Desfase estimado: ' + driftInfo,
+  ];
+
+  if (totalLines > 0) {
+    desc.push(
+      '',
+      '\u2014\u2014 LETRA ACTUAL \u2014\u2014',
+      currentLine,
+      '',
+      '\u2014\u2014 SIGUIENTE L\u00CDNEA \u2014\u2014',
+      nextLine,
+    );
+  }
+
+  return new EmbedBuilder()
+    .setColor(themeColor)
+    .setTitle('\uD83C\uDFB5 DIAGN\u00D3STICO DE SINCRONIZACI\u00D3N')
+    .setDescription(desc.join('\n'))
+    .setTimestamp()
+    .setFooter({ text: FOOTER });
+}
+
 // ── Ping ─────────────────────────────────────────────────────────────────────
 
 export function pingEmbed() {

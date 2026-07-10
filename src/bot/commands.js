@@ -23,6 +23,7 @@ import {
   logsEmbed, pingEmbed, pingResultEmbed,
   themeInfoEmbed, themeChangedEmbed,
   statsEmbed, statsResetEmbed,
+  diagnosticEmbed,
 } from './ui.js';
 import {
   getDisplayMode, setDisplayMode,
@@ -409,6 +410,12 @@ async function handleStats(interaction) {
   }
 }
 
+async function handleDiagnostico(interaction) {
+  const np = readNowplaying();
+  if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
+  await interaction.reply({ embeds: [diagnosticEmbed(np)] });
+}
+
 const HANDLERS = {
   on: handleOn, encender: handleOn,
   off: handleOff, apagar: handleOff,
@@ -435,6 +442,7 @@ const HANDLERS = {
   broadcast: handleBroadcast,
   format: handleFormat,
   stats: handleStats, estadisticas: handleStats,
+  diagnostico: handleDiagnostico, diagnostic: handleDiagnostico,
 };
 
 function b(name, desc, fn) {
@@ -668,6 +676,8 @@ export const COMMANDS = [
           .addSubcommand(function (s) { return s.setName('remove').setDescription('Remove live channel'); });
       });
   }),
+  b('diagnostico', 'Ver diagnóstico de sincronización de la canción actual', function (c) { return c; }),
+  b('diagnostic', 'View sync diagnostic for current track', function (c) { return c; }),
 ];
 
 export async function executeSlashCommand(interaction, client) {

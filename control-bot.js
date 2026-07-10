@@ -26,6 +26,7 @@ import {
   themeInfoEmbed, themeChangedEmbed, themeRow,
   formatOverrideAddedEmbed, formatOverrideRemovedEmbed, formatOverrideListEmbed,
   statsEmbed, statsResetEmbed,
+  diagnosticEmbed,
 } from './src/bot/ui.js';
 import { startLiveUpdates, stopLiveUpdates } from './src/bot/live.js';
 import { startKaraoke, stopKaraoke, isKaraokeActive } from './src/bot/lyrics-live.js';
@@ -401,6 +402,12 @@ client.on('messageCreate', async (msg) => {
       return msg.reply({ embeds: [statsResetEmbed()] });
     }
     msg.reply({ embeds: [statsEmbed(getStats())] });
+  }
+
+  else if (command === '!diag' || command === '!diagnostico') {
+    const np = readNowplaying();
+    if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
+    msg.reply({ embeds: [diagnosticEmbed(np)] });
   }
 
   else if (command === '!help' || command === '!ayuda') {

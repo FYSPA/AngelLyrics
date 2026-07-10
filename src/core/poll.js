@@ -44,6 +44,8 @@ function saveNowplaying() {
       albumArtUrl: currentAlbumArtUrl,
       durationMs: currentDurationMs,
       progressMs: scheduler ? scheduler.estimatedProgressMs : lastProgressMs,
+      lastRawProgressMs,
+      lastPollTime: Date.now(),
       mode: displayMode,
       lyricLine: currentLyricLine,
       lyricLines: currentLyricLines,
@@ -288,6 +290,27 @@ export function stopPolling() {
 export function getLyricLines() { return currentLyricLines; }
 
 export function getLyricIndex() { return currentLyricIndex; }
+
+export function getSchedulerProgress() {
+  return scheduler ? scheduler.estimatedProgressMs : 0;
+}
+
+export function getTrackInfo() {
+  return {
+    trackId: currentTrackId,
+    trackName: currentTrackName,
+    artistName: currentArtistName,
+    albumName: currentAlbumName,
+    durationMs: currentDurationMs,
+    albumArtUrl: currentAlbumArtUrl,
+    lyricLine: currentLyricLine,
+    lyricIndex: currentLyricIndex,
+    lyricLines: currentLyricLines,
+    progressMs: scheduler ? scheduler.estimatedProgressMs : lastProgressMs,
+    lastRawProgressMs,
+    lastPollTime,
+  };
+}
 
 export async function startPolling() {
   if (pollInterval) clearInterval(pollInterval);
