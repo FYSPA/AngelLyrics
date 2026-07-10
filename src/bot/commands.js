@@ -23,7 +23,7 @@ import {
   logsEmbed, pingEmbed, pingResultEmbed,
   themeInfoEmbed, themeChangedEmbed,
   statsEmbed, statsResetEmbed,
-  diagnosticEmbed, compactDebug,
+  diagnosticEmbed, debugReport,
 } from './ui.js';
 import {
   getDisplayMode, setDisplayMode,
@@ -424,7 +424,7 @@ async function handleDiagnostico(interaction) {
 async function handleDebug(interaction) {
   const np = readNowplaying();
   if (!np || !np.trackName) return interaction.reply({ content: 'No hay música reproduciéndose.', ephemeral: true });
-  await interaction.reply({ content: compactDebug(np) });
+  await interaction.reply({ content: debugReport(np) });
 }
 
 async function handleResync(interaction) {
