@@ -199,12 +199,12 @@ export function helpEmbed() {
       },
       {
         name: 'Informaci\u00F3n',
-        value: '`!status` \u2014 Estado\n`!np` \u2014 Canci\u00F3n actual\n`!lyrics` \u2014 Karaoke en tiempo real\n`!logs` \u2014 \u00DAltimos logs\n`!repeat` \u2014 Repetir nowplaying\n`!recent` \u2014 Historial\n`!ping` \u2014 Latencia',
+        value: '`!status` \u2014 Estado\n`!np` \u2014 Canci\u00F3n actual\n`!lyrics` \u2014 Karaoke en tiempo real\n`!logs` \u2014 \u00DAltimos logs\n`!repeat` \u2014 Repetir nowplaying\n`!recent` \u2014 Historial\n`!ping` \u2014 Latencia\n`!debug` / `!diag` \u2014 Diagn\u00F3stico SMTC\n`!diagnostico` \u2014 Embed completo',
         inline: true,
       },
       {
         name: 'Configuraci\u00F3n',
-        value: '`!mode` / `!backend` / `!ui` / `!prefix` / `!emoji` / `!style` / `!cooldown` / `!filter` / `!blacklist` / `!format` / `!format override` / `!offset` / `!broadcast` / `!np channel`',
+        value: '`!mode` / `!backend` / `!ui` / `!prefix` / `!emoji` / `!style` / `!cooldown` / `!filter` / `!blacklist` / `!format` / `!format override` / `!offset` / `!resync` / `!broadcast` / `!np channel`',
         inline: false,
       },
       {

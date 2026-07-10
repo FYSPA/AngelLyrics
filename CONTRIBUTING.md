@@ -96,6 +96,8 @@ https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&permissions=0&scope
 - Do not commit `.env` or any real tokens
 - When adding new slash commands, add both English and Spanish versions using the pattern in `src/bot/commands.js`
 - New config keys must be exported from both `src/config/settings.js` and `src/config.js`
+- **SMTC/Windows changes:** The SMTC diagnostic system spans `src/core/poll.js` (deferred scheduler, `_smtcWasDead` auto-resync), `src/bot/ui.js` (`debugReport`, `diagnosticEmbed`), and `control-bot.js` (`!debug`, `!resync`). The `resync.json` file in `CONFIG_DIR` is a communication channel between control-bot and the main poll loop — ensure both sides handle it atomically (write → read → unlink).
+- **Position sources:** When adding new position-tracking backends, respect the `rawProgressMs`/`progressMs` convention in `src/spotify/windows.js` and the `estimateProgress` drift compensation in `src/spotify/progress.js`.
 
 ## Reporting Issues
 

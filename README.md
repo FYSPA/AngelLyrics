@@ -22,6 +22,9 @@ Discord Lyrics Status reads the currently playing track from Spotify — via **D
 
 No Spotify API key. No Spotify Premium. No setup beyond a single Discord token.
 
+> **Windows + Browser users:** SMTC reports `position=0` when listening via the Spotify web player or browser.  
+> **Fix:** Pause/resume restores position tracking, or set up the [Spotify API](#-spotify-api-optional) for accurate position.
+
 ---
 
 ## ✨ Features
@@ -138,6 +141,8 @@ The control bot (`control-bot.js`) is a separate Discord bot that lets you manag
 | `!lyrics` | Start/stop real-time karaoke lyrics (merges into live channel if set) |
 | `!repeat` | Repeat the nowplaying embed |
 | `!status` | Show system status |
+| `!debug` / `!diag` | Show SMTC technical analysis and sync diagnosis |
+| `!diagnostico` / `!diagnostic` | Full diagnostic embed with drift analysis |
 | `!prefix <text>` | Set text prefix before lyrics |
 | `!emoji <name>` | Set status emoji |
 | `!format [mode] <template>` | Set status format template |
@@ -148,6 +153,7 @@ The control bot (`control-bot.js`) is a separate Discord bot that lets you manag
 | `!blacklist add\|remove <pattern>` | Skip matching tracks |
 | `!broadcast <url>` | Push lyrics to a webhook in real time |
 | `!offset <ms>` | Fine-tune lyric sync offset |
+| `!resync [seconds]` | Force-resync the scheduler to a given position (or backend estimate) |
 | `!recent` | Show recently played tracks |
 | `!stats` | Show listening statistics (total plays, time, top 5) |
 | `!logs` | Show last PM2 logs |
@@ -175,6 +181,29 @@ npm install
 npm run build
 # Output: dist/AngelLyrics.exe
 ```
+
+---
+
+## 🔄 Spotify API (Optional)
+
+The bot can use the **Spotify Web API** as a fallback for accurate playback position — essential when SMTC reports `position=0` (common with browser-based Spotify on Windows).
+
+### Setup
+
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and create an app
+2. Copy the **Client ID** and **Client Secret**
+3. Add a Redirect URI: `http://localhost:3120/callback`
+4. Set these environment variables:
+
+```env
+SPOTIFY_CLIENT_ID=your_client_id
+SPOTIFY_CLIENT_SECRET=your_client_secret
+```
+
+5. Start the bot — it will show a Spotify auth link. Follow it to authorize.
+6. Once authenticated, the bot will use the API for accurate playback position.
+
+Without the API, the bot falls back to SMTC (Windows) or D-Bus (Linux). On Windows with browser playback, SMTC cannot report position — the API is the only way to get correct sync.
 
 ---
 
@@ -265,8 +294,18 @@ Delete `%APPDATA%\AngelLyrics\config.json` and relaunch the app, or use `--reset
 **Lyrics are not showing / wrong lyrics?**  
 LRCLIB may not have the track. The app falls back to lyrics.ovh then AZLyrics. If all fail, the status will show the track name and artist instead.
 
+**Lyrics are out of sync / position shows 0:00?**  
+On Windows, SMTC cannot report playback position when listening via **browser** (Spotify web player, Chrome, Edge, etc.). Position only updates on pause/resume.  
+**Solutions:** Use `!debug` to check SMTC state, use `!resync <seconds>` to manually set position, or set up the [Spotify API](#-spotify-api-optional) for automatic position tracking.
+
 **How do I generate images on Windows?**  
 Image generation currently requires the `sharp` library which works best on Linux. On Windows/macOS, the app falls back to embed-only display.
+
+**How can I check if SMTC is working?**  
+Use `!debug` or `!diag` to get a plaintext technical analysis showing SMTC state (MUERTO/VIVO/LENTO), scheduler position, drift, and recommendations. Use `!diagnostico` for the full embed version.
+
+**Does the Spotify API require Premium?**  
+No. The Spotify Web API's `currently-playing` endpoint works with free accounts. It only needs a Spotify Developer app (free) and OAuth authorization.
 
 ---
 

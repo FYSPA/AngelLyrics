@@ -22,6 +22,9 @@ AngelLyrics lee la canción que estás reproduciendo en Spotify — mediante **D
 
 Sin API de Spotify. Sin Spotify Premium. Solo necesitas un Discord User Token.
 
+> **Usuarios de Windows + navegador:** SMTC reporta `position=0` cuando escuchás desde el navegador web de Spotify.  
+> **Solución:** Pausar/reproducir restaura la posición, o configurá la [API de Spotify](#-api-de-spotify-opcional) para posición precisa.
+
 ---
 
 ## ✨ Funcionalidades
@@ -138,6 +141,8 @@ El bot de control (`control-bot.js`) es un bot de Discord separado para administ
 | `!lyrics` | Iniciar/detener karaoke en tiempo real (se fusiona con live channel si está configurado) |
 | `!repeat` | Repetir el embed de nowplaying |
 | `!status` | Mostrar estado del sistema |
+| `!debug` / `!diag` | Mostrar análisis técnico del SMTC y diagnóstico de sincronía |
+| `!diagnostico` / `!diagnostic` | Embed de diagnóstico completo con análisis de deriva |
 | `!prefix <texto>` | Establecer prefijo antes de las letras |
 | `!emoji <nombre>` | Establecer emoji del estado |
 | `!format [modo] <plantilla>` | Establecer plantilla de formato |
@@ -148,6 +153,7 @@ El bot de control (`control-bot.js`) es un bot de Discord separado para administ
 | `!blacklist add\|remove <patrón>` | Ignorar canciones que coincidan |
 | `!broadcast <url>` | Enviar letras a un webhook en tiempo real |
 | `!offset <ms>` | Ajustar sincronía de letras |
+| `!resync [segundos]` | Forzar re-sincronización del scheduler a una posición dada (o estimación del backend) |
 | `!recent` | Mostrar canciones recientes |
 | `!stats` | Mostrar estadísticas de escucha (reproducciones, tiempo, top 5) |
 | `!logs` | Mostrar últimos logs de PM2 |
@@ -175,6 +181,29 @@ npm install
 npm run build
 # Output: dist/AngelLyrics.exe
 ```
+
+---
+
+## 🔄 API de Spotify (Opcional)
+
+El bot puede usar la **API Web de Spotify** para obtener la posición exacta de reproducción — esencial cuando SMTC reporta `position=0` (común con Spotify en navegador en Windows).
+
+### Configuración
+
+1. Ve a [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) y crea una app
+2. Copia el **Client ID** y **Client Secret**
+3. Agrega una Redirect URI: `http://localhost:3120/callback`
+4. Configura estas variables de entorno:
+
+```env
+SPOTIFY_CLIENT_ID=tu_client_id
+SPOTIFY_CLIENT_SECRET=tu_client_secret
+```
+
+5. Inicia el bot — mostrará un link de auth de Spotify. Seguilo para autorizar.
+6. Una vez autenticado, el bot usará la API para posición precisa.
+
+Sin la API, el bot usa SMTC (Windows) o D-Bus (Linux). En Windows con navegador, SMTC no puede reportar posición — la API es la única forma de obtener sincronía correcta.
 
 ---
 
@@ -265,8 +294,18 @@ Elimina el archivo `%APPDATA%\AngelLyrics\config.json` y vuelve a ejecutar la ap
 **¿No se ven las letras o son incorrectas?**  
 Puede que LRCLIB no tenga esa canción. La app prueba con lyrics.ovh y luego AZLyrics. Si todas fallan, se muestra el nombre y artista.
 
+**Las letras están desincronizadas / la posición muestra 0:00?**  
+En Windows, SMTC no puede reportar la posición cuando escuchás desde el **navegador** (Spotify web, Chrome, Edge, etc.). La posición solo se actualiza al pausar/reproducir.  
+**Soluciones:** Usá `!debug` para revisar el estado del SMTC, usá `!resync <segundos>` para fijar la posición manualmente, o configurá la [API de Spotify](#-api-de-spotify-opcional) para posición automática.
+
 **¿Cómo genero imágenes en Windows?**  
 La generación de imágenes usa la librería `sharp` que funciona mejor en Linux. En Windows/Mac la app usa solo el embed sin imagen.
+
+**¿Cómo verifico si SMTC está funcionando?**  
+Usá `!debug` o `!diag` para obtener un análisis técnico en texto plano con el estado del SMTC (MUERTO/VIVO/LENTO), posición del scheduler, deriva y recomendaciones. Usá `!diagnostico` para la versión embed completa.
+
+**¿La API de Spotify requiere Premium?**  
+No. El endpoint `currently-playing` de la API Web funciona con cuentas gratuitas. Solo necesitas una app de Spotify Developer (gratis) y autorización OAuth.
 
 ---
 
