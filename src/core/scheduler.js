@@ -99,7 +99,12 @@ export class LyricScheduler {
       }
     }
 
-    if (idx < 0) return;
+    if (idx < 0) {
+      if ((Date.now() - this.#startedAt) % 5000 < 250) {
+        console.log(`[Planificador] Tick: estMs=${Math.round(estimatedMs)}ms idx=${idx}`);
+      }
+      return;
+    }
     if (idx === this.#currentIndex) return;
 
     this.#currentIndex = idx;
