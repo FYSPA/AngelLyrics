@@ -207,7 +207,8 @@ async function poll() {
       const elapsed = nowMs - lastPollTime;
       const expectedProgress = lastProgressMs + elapsed;
       const drift = Math.abs(track.progressMs - expectedProgress);
-      const rawPosDelta = Math.abs(track.progressMs - lastRawProgressMs);
+      const rawPos = track.rawProgressMs ?? track.progressMs;
+      const rawPosDelta = Math.abs(rawPos - lastRawProgressMs);
       const stalled = rawPosDelta < 500 && elapsed > 1000 && rawPosDelta < elapsed * 0.5;
 
       if (stalled) {
@@ -224,7 +225,7 @@ async function poll() {
       }
     }
 
-    lastRawProgressMs = track.progressMs;
+    lastRawProgressMs = track.rawProgressMs ?? track.progressMs;
 
     if (currentTrackId) {
       const pMs = scheduler ? scheduler.estimatedProgressMs : lastProgressMs;

@@ -56,6 +56,7 @@ export async function getCurrentTrackWindows() {
         progressMs: estimateProgress('windows::smtc', data.positionMs + elapsed, data.playbackStatus, trackId, data.durationMs),
         durationMs: Math.max(0, data.durationMs || 0),
         albumArtUrl,
+        rawProgressMs: data.positionMs,
       };
     } catch (err) {
       console.warn('[Windows] Error parseando salida SMTC:', err.message);
