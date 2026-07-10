@@ -8,7 +8,7 @@ export function makeTrackId(title, artist) {
 
 export function runCommand(cmd, args) {
   return new Promise((resolve) => {
-    const proc = spawn(cmd, args);
+    const proc = spawn(cmd, args, { windowsHide: true });
     let stdout = '';
     proc.stdout.setEncoding('utf8');
     proc.stdout.on('data', (d) => (stdout += d));

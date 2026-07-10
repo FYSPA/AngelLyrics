@@ -90,8 +90,10 @@ function distributeLyrics(text, durationMs = 0) {
   if (lines.length === 0) return null;
   if (lines.length === 1) return [{ timeMs: 0, text: lines[0] }];
 
+  const effectiveDuration = durationMs > 0 ? durationMs : 30_000;
+
   return lines.map((line, i) => ({
-    timeMs: Math.round((i / lines.length) * durationMs),
+    timeMs: Math.round((i / lines.length) * effectiveDuration),
     text: line,
   }));
 }

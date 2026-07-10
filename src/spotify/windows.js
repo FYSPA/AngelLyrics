@@ -15,14 +15,16 @@ try {
     if (-not $props.Title) { continue }
     $pb = $s.GetPlaybackInfo()
     $tl = $s.GetTimelineProperties()
+    try { $dur = [math]::Round($tl.EndTime.TotalMilliseconds) } catch { $dur = 0 }
+    try { $pos = [math]::Round($tl.Position.TotalMilliseconds) } catch { $pos = 0 }
     $result = @{
       playbackStatus = "$($pb.PlaybackStatus)"
       sourceApp = "$($s.SourceAppUserModelId)"
       title    = "$($props.Title)"
       artist   = "$($props.Artist)"
       album    = "$($props.AlbumTitle)"
-      positionMs = [math]::Round($tl.Position.TotalMilliseconds)
-      durationMs = [math]::Round($tl.EndTime.TotalMilliseconds)
+      positionMs = $pos
+      durationMs = $dur
     }
     break
   }
@@ -50,7 +52,7 @@ export async function getCurrentTrackWindows() {
         artistName: data.artist,
         albumName: data.album || '',
         progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
-        durationMs: data.durationMs || 0,
+        durationMs: Math.max(0, data.durationMs || 0),
         albumArtUrl,
       };
     } catch (err) {

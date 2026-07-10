@@ -122,7 +122,7 @@ export function noMusicEmbed() {
 export function nowplayingEmbed(np) {
   const theme = getUiTheme();
   const themeColor = (THEME_COLORS[theme] || THEME_COLORS.classic).embed;
-  const pct = np.durationMs > 0 ? Math.round((np.progressMs / np.durationMs) * 100) : 0;
+  const pct = np.durationMs > 0 ? Math.min(100, Math.round((np.progressMs / np.durationMs) * 100)) : 0;
   const barWidth = PROGRESS_BAR_WIDTH_EMBED;
   const filled = Math.round((pct / 100) * barWidth);
   const bar = '\u25B0'.repeat(filled) + '\u25B1'.repeat(barWidth - filled);
@@ -521,7 +521,7 @@ export function karaokeEmbed(np) {
   }
 
   const desc = parts.join('\n');
-  const pct = np.durationMs > 0 ? Math.round((np.progressMs / np.durationMs) * 100) : 0;
+  const pct = np.durationMs > 0 ? Math.min(100, Math.round((np.progressMs / np.durationMs) * 100)) : 0;
   const barWidth = PROGRESS_BAR_WIDTH_KARAOKE;
   const filled = Math.round((pct / 100) * barWidth);
   const bar = '\u25B0'.repeat(filled) + '\u25B1'.repeat(barWidth - filled);
