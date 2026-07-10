@@ -26,6 +26,7 @@ let currentLyricIndex = -1;
 let scheduler = null;
 let lastProgressMs = 0;
 let lastPollTime = 0;
+let lastRawProgressMs = 0;
 let displayMode = getDisplayMode();
 let _polling = false;
 let pollInterval = null;
@@ -184,7 +185,7 @@ async function poll() {
         currentLyricLines = lyrics || [];
 
         if (lyrics && lyrics.length > 0) {
-          const adjustedMs = Math.max(0, track.progressMs + (Date.now() - trackFetchedAt) + getLyricOffset());
+          const adjustedMs = Math.max(0, track.progressMs + getLyricOffset());
           scheduler = new LyricScheduler(lyrics, (line, index) => {
             currentLyricLine = line.text || '';
             currentLyricIndex = index;
@@ -206,16 +207,24 @@ async function poll() {
       const elapsed = nowMs - lastPollTime;
       const expectedProgress = lastProgressMs + elapsed;
       const drift = Math.abs(track.progressMs - expectedProgress);
+      const rawPosDelta = Math.abs(track.progressMs - lastRawProgressMs);
+      const stalled = rawPosDelta < 500 && elapsed > 1000 && rawPosDelta < elapsed * 0.5;
 
-      if (drift > SEEK_THRESHOLD_MS) {
+      if (stalled) {
+        console.log(
+          `[Principal] Posición SMTC estancada (Δ${rawPosDelta}ms en ${elapsed}ms), saltando resincronización.`
+        );
+      } else if (drift > SEEK_THRESHOLD_MS) {
         console.log(
           `[Principal] Salto detectado (desfase ${(drift / 1000).toFixed(1)}s). Resincronizando letras.`
         );
-        const restartMs = Math.max(0, track.progressMs + (nowMs - trackFetchedAt) + getLyricOffset());
+        const restartMs = Math.max(0, track.progressMs + getLyricOffset());
         scheduler.restart(restartMs);
         saveNowplaying();
       }
     }
+
+    lastRawProgressMs = track.progressMs;
 
     if (currentTrackId) {
       const pMs = scheduler ? scheduler.estimatedProgressMs : lastProgressMs;

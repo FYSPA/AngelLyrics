@@ -33,8 +33,10 @@ try {
 `;
 
 export async function getCurrentTrackWindows() {
+  const fetchStartedAt = Date.now();
   const raw = await runCommand('powershell', ['-NoProfile', '-NonInteractive', '-Command', SMTC_SCRIPT]);
   if (!raw) return null;
+  const elapsed = Date.now() - fetchStartedAt;
   const lines = raw.trim().split('\n');
   for (const line of lines) {
     const trimmed = line.trim();
@@ -51,7 +53,7 @@ export async function getCurrentTrackWindows() {
         trackName: data.title,
         artistName: data.artist,
         albumName: data.album || '',
-        progressMs: estimateProgress('windows::smtc', data.positionMs, data.playbackStatus, trackId, data.durationMs),
+        progressMs: estimateProgress('windows::smtc', data.positionMs + elapsed, data.playbackStatus, trackId, data.durationMs),
         durationMs: Math.max(0, data.durationMs || 0),
         albumArtUrl,
       };
