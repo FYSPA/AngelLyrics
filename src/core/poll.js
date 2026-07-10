@@ -33,6 +33,8 @@ let trackStartTime = 0;
 let displayMode = getDisplayMode();
 let _polling = false;
 let pollInterval = null;
+let _schedulerDeferred = false;
+let _deferredSince = 0;
 
 function saveNowplaying() {
   try {
@@ -191,14 +193,21 @@ async function poll() {
         currentLyricLines = lyrics || [];
 
         if (lyrics && lyrics.length > 0) {
-          const adjustedMs = Math.max(0, track.progressMs + getLyricOffset());
-          scheduler = new LyricScheduler(lyrics, (line, index) => {
-            currentLyricLine = line.text || '';
-            currentLyricIndex = index;
-            saveNowplaying();
-            onLineChange(line, displayMode, currentTrackName, currentArtistName, currentAlbumName);
-          });
-          scheduler.start(adjustedMs);
+          const rawAtChange = track.rawProgressMs ?? track.progressMs;
+          if (rawAtChange < 500) {
+            _schedulerDeferred = true;
+            _deferredSince = Date.now();
+            console.log('[Principal] SMTC=0, scheduler diferido hasta próximo ciclo');
+          } else {
+            const adjustedMs = Math.max(0, track.progressMs + getLyricOffset());
+            scheduler = new LyricScheduler(lyrics, (line, index) => {
+              currentLyricLine = line.text || '';
+              currentLyricIndex = index;
+              saveNowplaying();
+              onLineChange(line, displayMode, currentTrackName, currentArtistName, currentAlbumName);
+            });
+            scheduler.start(adjustedMs);
+          }
         } else {
           lastProgressMs = track.progressMs + (Date.now() - trackFetchedAt);
           showProgress(lastProgressMs, currentDurationMs, 'lyrics');
@@ -210,12 +219,20 @@ async function poll() {
 
     else if (displayMode === 'lyrics' && lastPollTime > 0) {
       if (!scheduler) {
-        const lyrics = await getLyrics(currentTrackId, currentTrackName, currentArtistName, currentAlbumName, currentDurationMs);
-        if (lyrics && lyrics.length > 0) {
-          currentLyricLines = lyrics;
+        if (_schedulerDeferred) {
+          const rawNow = track.rawProgressMs ?? track.progressMs;
+          if (rawNow >= 500) {
+            _schedulerDeferred = false;
+            console.log(`[Principal] SMTC despertó en ${rawNow}ms, creando scheduler`);
+          } else if (Date.now() - _deferredSince > 4000) {
+            _schedulerDeferred = false;
+            console.log(`[Principal] Timeout SMTC, creando scheduler con ${Math.round(track.progressMs)}ms`);
+          }
+        }
+        if (!_schedulerDeferred && currentLyricLines.length > 0) {
           currentLyricIndex = -1;
           const adjustedMs = Math.max(0, track.progressMs + getLyricOffset());
-          scheduler = new LyricScheduler(lyrics, (line, index) => {
+          scheduler = new LyricScheduler(currentLyricLines, (line, index) => {
             currentLyricLine = line.text || '';
             currentLyricIndex = index;
             saveNowplaying();
@@ -223,6 +240,7 @@ async function poll() {
           });
           scheduler.start(adjustedMs);
           saveNowplaying();
+          showProgress(track.progressMs, currentDurationMs, 'lyrics');
         }
       } else {
         const nowMs = Date.now();

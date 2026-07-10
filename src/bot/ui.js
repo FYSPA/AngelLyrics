@@ -807,6 +807,187 @@ export function diagnosticEmbed(np) {
     .setFooter({ text: FOOTER });
 }
 
+// ── Debug con análisis ───────────────────────────────────────────────────────
+
+export function debugReport(np) {
+  const schedMs = np.progressMs || 0;
+  const rawMs = np.lastRawProgressMs != null ? np.lastRawProgressMs : -1;
+  const durMs = np.durationMs || 1;
+  const now = Date.now();
+  const elapsedSincePoll = np.lastPollTime ? (now - np.lastPollTime) : 99999;
+
+  const lines = np.lyricLines || [];
+  const idx = np.lyricIndex != null ? np.lyricIndex : -1;
+  const totalL = lines.length;
+
+  const schedFmt = formatTime(schedMs);
+  const rawFmt = rawMs >= 0 ? formatTime(rawMs) : '--:--';
+  const durFmt2 = formatTime(durMs);
+
+  // scheduler current & next line
+  let schedLineText = '???';
+  let schedLineTime = 0;
+  if (idx >= 0 && idx < lines.length) {
+    schedLineText = lines[idx].text || '';
+    schedLineTime = lines[idx].timeMs;
+  }
+
+  let nextSec = null;
+  let nextLineText = '';
+  if (idx >= 0 && idx + 1 < lines.length) {
+    nextSec = Math.max(0, (lines[idx + 1].timeMs - schedMs) / 1000);
+    nextLineText = lines[idx + 1].text || '';
+  }
+
+  // real line by SMTC
+  let realResult = null;
+  if (rawMs > 0) realResult = findLineAt(lines, rawMs);
+
+  const driftMs = rawMs >= 0 ? (schedMs - rawMs) : null;
+  const absDrift = driftMs != null ? Math.abs(driftMs) / 1000 : null;
+
+  // smtc state
+  const smtcMuerto = rawMs >= 0 && rawMs < 500 && elapsedSincePoll > 3000 && schedMs > 3000;
+  const smtcVivo = rawMs > 2000 && elapsedSincePoll < 5000;
+  const smtcLento = rawMs > 0 && !smtcMuerto && !smtcVivo;
+
+  const out = [];
+
+  function L(t) { out.push(t); }
+  function esc(t) { return escDiscord(String(t || '')); }
+
+  // ═══════════ header ═══════════
+  L('```');
+  L('\u2550'.repeat(47));
+  L(esc(np.trackName) + ' \u2014 ' + esc(np.artistName));
+  L('\u2550'.repeat(47));
+  L('');
+
+  // ═══════════ sources ═══════════
+  L('FUENTES DE TIEMPO:');
+  L('  Scheduler: ' + schedFmt + ' \u2014 reloj interno del bot');
+  L('  SMTC (Spotify): ' + rawFmt + ' \u2014 ' + (rawMs >= 0 ? 'lo que Windows lee de Spotify' : 'no disponible'));
+  L('');
+
+  // ═══════════ SMTC analysis ═══════════
+  L('AN\u00C1LISIS DEL SMTC:');
+  L('');
+
+  if (smtcMuerto) {
+    L('  El SMTC est\u00E1 **MUERTO**. Windows no est\u00E1 reportando posici\u00F3n de');
+    L('  Spotify. Estancado en 0:00 desde hace ' + Math.round(elapsedSincePoll / 1000) + ' segundos.');
+    L('');
+    L('  Esto pasa cuando:');
+    L('  \u2022 Spotify est\u00E1 minimizado a bandeja sin ventana visible');
+    L('  \u2022 Windows decidi\u00F3 no exponer los metadatos de sesi\u00F3n');
+    L('  \u2022 Hay otra app de audio peleando el control del SMTC');
+    L('');
+    L('  **CONSECUENCIA:** El bot no tiene referencia. El scheduler');
+    L('  sigue corriendo con su propio reloj, pero no sabe si va');
+    L('  adelantado o atrasado respecto a la realidad.');
+    L('');
+    L('  El desfase que muestra el coso ese es **FICTICIO** porque');
+    L('  compara el scheduler contra 0, no contra la posici\u00F3n real.');
+    L('  Con SMTC en 0, todo desfase es mentira.');
+  } else if (smtcVivo) {
+    L('  El SMTC est\u00E1 **VIVO**. Reportando posici\u00F3n normalmente.');
+    L('  Windows lee Spotify correctamente.');
+    L('');
+
+    if (absDrift != null && absDrift < 2) {
+      L('  Desfase scheduler vs Spotify: ' + (driftMs >= 0 ? '+' : '') + absDrift.toFixed(1) + 's.');
+      L('  Dentro de margen aceptable. Drift normal por latencia de polling.');
+    } else if (absDrift != null && absDrift <= 5) {
+      L('  Desfase scheduler vs Spotify: ' + (driftMs >= 0 ? '+' : '') + absDrift.toFixed(1) + 's.');
+      L('  El scheduler va ' + (driftMs > 0 ? 'adelantado' : 'atrasado') + '. Hay desfase pero');
+      L('  no es cr\u00EDtico. Posible seek no detectado o drift acumulado.');
+    } else if (absDrift != null) {
+      L('  Desfase scheduler vs Spotify: ' + (driftMs >= 0 ? '+' : '') + absDrift.toFixed(1) + 's.');
+      L('  **Desfase cr\u00EDtico.** El scheduler va ' + (driftMs > 0 ? 'adelantado' : 'atrasado'));
+      L('  por m\u00E1s de 5 segundos. Probable seek no detectado o error de');
+      L('  sincronizaci\u00F3n inicial.');
+    }
+  } else if (smtcLento) {
+    L('  El SMTC est\u00E1 **VIVO pero LENTO**. Windows actualiza la posici\u00F3n');
+    L('  pero no en tiempo real. El scheduler se desv\u00EDa progresivamente');
+    L('  porque conf\u00EDa en su propio reloj mientras el SMTC va atrasado.');
+    L('');
+    if (absDrift != null) {
+      L('  DRIFT ACUMULADO: ' + absDrift.toFixed(1) + ' segundos. Cada segundo que');
+      L('  pasa, el scheduler se adelanta m\u00E1s respecto a la realidad.');
+    }
+  } else {
+    L('  No se puede determinar el estado del SMTC. Datos insuficientes.');
+  }
+
+  L('');
+
+  // ═══════════ scheduler lyric ═══════════
+  L('LETRA QUE EL SCHEDULER CREE:');
+  if (idx >= 0 && idx < lines.length) {
+    L('  L\u00EDnea ' + (idx + 1) + ': "' + esc(schedLineText) + '" @ ' + formatTime(schedLineTime));
+  } else {
+    L('  (sin letras cargadas o esperando)');
+  }
+  if (nextSec != null) {
+    L('  Pr\u00F3xima en ' + nextSec.toFixed(1) + 's \u2014 "' + esc(nextLineText) + '"');
+  }
+  L('');
+
+  // ═══════════ real lyric ═══════════
+  L('LETRA REAL (solo si SMTC vivo):');
+  if (smtcMuerto || rawMs <= 0) {
+    L('  **DESCONOCIDA.** Sin referencia no se puede saber. El scheduler');
+    L('  puede estar mostrando una l\u00EDnea que no corresponde a la realidad.');
+  } else if (realResult) {
+    L('  L\u00EDnea ' + (realResult.index + 1) + ': "' + esc(realResult.line.text || '') + '" @ ' + formatTime(realResult.line.timeMs));
+  } else {
+    L('  No hay letras cargadas para esta posici\u00F3n.');
+  }
+  L('');
+
+  // ═══════════ final diagnosis ═══════════
+  L('DIAGN\u00D3STICO FINAL:');
+  if (smtcMuerto || rawMs <= 0) {
+    L('  El scheduler va por ' + schedFmt + '. Spotify reporta ' + rawFmt + ' (inv\u00E1lido).');
+    L('  El gap es **INCALCULABLE** porque Spotify no reporta posici\u00F3n.');
+    L('  Cualquier n\u00FAmero de desfase que hayas visto antes era ficticio:');
+    L('  comparaba el scheduler contra 0, no contra la realidad.');
+  } else if (driftMs != null) {
+    L('  El scheduler va por ' + schedFmt + '. Spotify va por ' + rawFmt + '.');
+    L('  Gap: ' + (driftMs >= 0 ? '+' : '') + absDrift.toFixed(1) + ' segundos ' + (driftMs > 0 ? 'adelantado.' : 'atrasado.'));
+  }
+  L('');
+
+  // ═══════════ recommendation ═══════════
+  L('RECOMENDACI\u00D3N:');
+  if (smtcMuerto) {
+    L('  Reproducir/pausar en Spotify para despertar el SMTC.');
+    L('  Si persiste, cerrar Spotify y abrirlo con ventana visible,');
+    L('  no minimizado a la bandeja. El SMTC necesita una sesi\u00F3n');
+    L('  activa en Windows para reportar posici\u00F3n.');
+    L('');
+    L('  Mientras tanto, pod\u00E9s usar `!resync <segundos>` para forzar');
+    L('  una posici\u00F3n aproximada, pero sin SMTC vivo va a ser');
+    L('  siempre a ciegas.');
+  } else if (smtcLento || (absDrift != null && absDrift > 5)) {
+    L('  Usar `!restart` para recalibrar el scheduler. Si el SMTC');
+    L('  est\u00E1 lento pero responde, `!offset +/-' + Math.round(absDrift != null ? absDrift * 1000 : 0) + 'ms`');
+    L('  puede ajustar el desfase manualmente.');
+  } else if (absDrift != null && absDrift >= 2) {
+    L('  Usar `!offset ' + (driftMs > 0 ? '-' : '+') + Math.round(absDrift * 1000) + 'ms` para ajuste fino.');
+    L('  Si el desfase vuelve a aparecer, considerar `!restart`.');
+  } else {
+    L('  Dentro de margen. No requiere acci\u00F3n.');
+  }
+
+  L('');
+  L('\u2550'.repeat(47));
+  L('```');
+
+  return out.join('\n');
+}
+
 // ── Ping ─────────────────────────────────────────────────────────────────────
 
 export function pingEmbed() {

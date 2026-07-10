@@ -23,7 +23,7 @@ import {
   logsEmbed, pingEmbed, pingResultEmbed,
   themeInfoEmbed, themeChangedEmbed,
   statsEmbed, statsResetEmbed,
-  diagnosticEmbed,
+  diagnosticEmbed, compactDebug,
 } from './ui.js';
 import {
   getDisplayMode, setDisplayMode,
@@ -421,6 +421,12 @@ async function handleDiagnostico(interaction) {
   await interaction.reply({ embeds: [diagnosticEmbed(np)] });
 }
 
+async function handleDebug(interaction) {
+  const np = readNowplaying();
+  if (!np || !np.trackName) return interaction.reply({ content: 'No hay música reproduciéndose.', ephemeral: true });
+  await interaction.reply({ content: compactDebug(np) });
+}
+
 async function handleResync(interaction) {
   const np = readNowplaying();
   if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
@@ -477,6 +483,7 @@ const HANDLERS = {
   format: handleFormat,
   stats: handleStats, estadisticas: handleStats,
   diagnostico: handleDiagnostico, diagnostic: handleDiagnostico,
+  debug: handleDebug,
   resync: handleResync, resincronizar: handleResync,
 };
 
@@ -723,6 +730,7 @@ export const COMMANDS = [
       return o.setName('segundos').setDescription('Posición en segundos (opcional)').setRequired(false);
     });
   }),
+  b('debug', 'Show compact sync debug info', function (c) { return c; }),
 ];
 
 export async function executeSlashCommand(interaction, client) {
