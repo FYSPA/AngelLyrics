@@ -35,6 +35,8 @@ let _polling = false;
 let pollInterval = null;
 let _schedulerDeferred = false;
 let _deferredSince = 0;
+let _smtcWasDead = false;
+let _smtcWasDeadSince = 0;
 
 function saveNowplaying() {
   try {
@@ -175,6 +177,7 @@ async function poll() {
       currentLyricIndex = -1;
 
       if (scheduler) { scheduler.stop(); scheduler = null; }
+      _smtcWasDead = false;
 
       addRecentTrack({ trackName: track.trackName, artistName: track.artistName, albumName: track.albumName });
       addTrackPlay(track.trackId || 'unknown', track.trackName, track.artistName, track.durationMs);
@@ -226,6 +229,8 @@ async function poll() {
             console.log(`[Principal] SMTC despertó en ${rawNow}ms, creando scheduler`);
           } else if (Date.now() - _deferredSince > 4000) {
             _schedulerDeferred = false;
+            _smtcWasDead = true;
+            _smtcWasDeadSince = Date.now();
             console.log(`[Principal] Timeout SMTC, creando scheduler con ${Math.round(track.progressMs)}ms`);
           }
         }
@@ -244,10 +249,24 @@ async function poll() {
         }
       } else {
         const nowMs = Date.now();
+        const rawPos = track.rawProgressMs ?? track.progressMs;
+
+        if (_smtcWasDead) {
+          if (rawPos >= 1000) {
+            _smtcWasDead = false;
+            const restartMs = Math.max(0, track.progressMs + getLyricOffset());
+            console.log(`[Principal] SMTC despertó (raw=${rawPos}ms), resync a ${Math.round(restartMs)}ms`);
+            scheduler.restart(restartMs);
+            saveNowplaying();
+          } else if (nowMs - _smtcWasDeadSince > 60000) {
+            _smtcWasDead = false;
+            console.log('[Principal] SMTC siguió muerto 60s, abandonando flag');
+          }
+        }
+
         const elapsed = nowMs - lastPollTime;
         const expectedProgress = lastProgressMs + elapsed;
         const drift = Math.abs(track.progressMs - expectedProgress);
-        const rawPos = track.rawProgressMs ?? track.progressMs;
         const rawPosDelta = Math.abs(rawPos - lastRawProgressMs);
         const stalled = rawPosDelta < 500 && elapsed > 1000 && rawPosDelta < elapsed * 0.5;
 
