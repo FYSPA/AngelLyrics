@@ -50,6 +50,11 @@ import {
 } from './src/config.js';
 import { readNowplaying } from './src/core/nowplaying.js';
 import { COMMANDS, executeSlashCommand } from './src/bot/commands.js';
+import { CONFIG_DIR } from './src/config/paths.js';
+import { join } from 'path';
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs';
+
+const RESYNC_FILE = join(CONFIG_DIR, 'resync.json');
 
 const BOT_TOKEN = process.env.CONTROL_BOT_TOKEN;
 const OWNER_ID = process.env.OWNER_ID;
@@ -408,6 +413,48 @@ client.on('messageCreate', async (msg) => {
     const np = readNowplaying();
     if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
     msg.reply({ embeds: [diagnosticEmbed(np)] });
+  }
+
+  else if (command === '!resync' || command === '!resincronizar') {
+    const np = readNowplaying();
+    if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
+
+    const secArg = args[1];
+    if (secArg) {
+      const secs = parseFloat(secArg);
+      if (isNaN(secs) || secs < 0) {
+        return msg.reply({ embeds: [errorEmbed('La posición debe ser un número en segundos (ej: !resync 24)')] });
+      }
+      try {
+        writeFileSync(RESYNC_FILE, JSON.stringify({ positionMs: Math.round(secs * 1000) }), 'utf8');
+        const totalSec = Math.round(secs);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        const newPos = m + ':' + String(s).padStart(2, '0');
+        msg.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(COLORS.GREEN)
+            .setTitle('Resincronización solicitada')
+            .setDescription('El scheduler se reajustará a **' + newPos + '** en el próximo ciclo (~1.5s).')
+          ],
+        });
+      } catch (err) {
+        msg.reply({ embeds: [errorEmbed('Error escribiendo archivo de resync: ' + err.message)] });
+      }
+    } else {
+      try {
+        writeFileSync(RESYNC_FILE, JSON.stringify({ force: true }), 'utf8');
+        msg.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(COLORS.GREEN)
+            .setTitle('Resincronización solicitada')
+            .setDescription('El scheduler se reajustará a la posición actual del backend en el próximo ciclo (~1.5s).')
+          ],
+        });
+      } catch (err) {
+        msg.reply({ embeds: [errorEmbed('Error escribiendo archivo de resync: ' + err.message)] });
+      }
+    }
   }
 
   else if (command === '!help' || command === '!ayuda') {

@@ -47,6 +47,11 @@ import { readNowplaying } from '../core/nowplaying.js';
 import { canGenerate, fetchImage, generateImage } from './image.js';
 import { startLiveUpdates, stopLiveUpdates } from './live.js';
 import { startKaraoke, stopKaraoke, isKaraokeActive } from './lyrics-live.js';
+import { CONFIG_DIR } from '../config/paths.js';
+import { join } from 'path';
+import { writeFileSync } from 'fs';
+
+const RESYNC_FILE = join(CONFIG_DIR, 'resync.json');
 
 const MODE_CHOICES = [
   { name: 'Lyrics', value: 'lyrics' },
@@ -416,6 +421,35 @@ async function handleDiagnostico(interaction) {
   await interaction.reply({ embeds: [diagnosticEmbed(np)] });
 }
 
+async function handleResync(interaction) {
+  const np = readNowplaying();
+  if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
+
+  const secs = interaction.options.getNumber('seconds');
+  try {
+    if (secs != null) {
+      writeFileSync(RESYNC_FILE, JSON.stringify({ positionMs: Math.round(secs * 1000) }), 'utf8');
+      const m = Math.floor(secs / 60);
+      const s = Math.round(secs) % 60;
+      const newPos = m + ':' + String(s).padStart(2, '0');
+      await interaction.reply({ embeds: [new EmbedBuilder()
+        .setColor(COLORS.GREEN)
+        .setTitle('Resincronización solicitada')
+        .setDescription('El scheduler se reajustará a **' + newPos + '** en el próximo ciclo (~1.5s).')
+      ]});
+    } else {
+      writeFileSync(RESYNC_FILE, JSON.stringify({ force: true }), 'utf8');
+      await interaction.reply({ embeds: [new EmbedBuilder()
+        .setColor(COLORS.GREEN)
+        .setTitle('Resincronización solicitada')
+        .setDescription('El scheduler se reajustará a la posición actual del backend en el próximo ciclo (~1.5s).')
+      ]});
+    }
+  } catch (err) {
+    await interaction.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
+  }
+}
+
 const HANDLERS = {
   on: handleOn, encender: handleOn,
   off: handleOff, apagar: handleOff,
@@ -443,6 +477,7 @@ const HANDLERS = {
   format: handleFormat,
   stats: handleStats, estadisticas: handleStats,
   diagnostico: handleDiagnostico, diagnostic: handleDiagnostico,
+  resync: handleResync, resincronizar: handleResync,
 };
 
 function b(name, desc, fn) {
@@ -678,6 +713,16 @@ export const COMMANDS = [
   }),
   b('diagnostico', 'Ver diagnóstico de sincronización de la canción actual', function (c) { return c; }),
   b('diagnostic', 'View sync diagnostic for current track', function (c) { return c; }),
+  b('resync', 'Force resync scheduler position', function (c) {
+    return c.addNumberOption(function (o) {
+      return o.setName('seconds').setDescription('Position in seconds (optional)').setRequired(false);
+    });
+  }),
+  b('resincronizar', 'Forzar resincronización del scheduler', function (c) {
+    return c.addNumberOption(function (o) {
+      return o.setName('segundos').setDescription('Posición en segundos (opcional)').setRequired(false);
+    });
+  }),
 ];
 
 export async function executeSlashCommand(interaction, client) {

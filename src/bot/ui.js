@@ -582,69 +582,222 @@ export function logsEmbed(text, source) {
 
 // ── Diagnóstico ─────────────────────────────────────────────────────────────
 
+function findLineAt(lyrics, positionMs) {
+  if (!lyrics || !lyrics.length || positionMs == null) return null;
+  let lo = 0, hi = lyrics.length - 1, idx = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    if (lyrics[mid].timeMs <= positionMs) { idx = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  return idx >= 0 ? { line: lyrics[idx], index: idx } : null;
+}
+
+function bar(filled, total, width, char) {
+  const f = Math.round((filled / Math.max(1, total)) * width);
+  return char.repeat(Math.min(f, width)) + '\u25B1'.repeat(Math.max(0, width - Math.min(f, width)));
+}
+
 export function diagnosticEmbed(np) {
   const theme = getUiTheme();
   const themeColor = (THEME_COLORS[theme] || THEME_COLORS.classic).embed;
-  const durationSec = np.durationMs ? (np.durationMs / 1000).toFixed(1) : '?';
-  const progressSec = np.progressMs ? (np.progressMs / 1000).toFixed(1) : '0.0';
 
-  const pct = np.durationMs > 0 ? Math.min(100, Math.round((np.progressMs / np.durationMs) * 100)) : 0;
-  const barWidth = 10;
-  const filled = Math.round((pct / 100) * barWidth);
-  const bar = '\u25B0'.repeat(filled) + '\u25B1'.repeat(barWidth - filled);
+  // ── datos básicos ──
+  const schedMs = np.progressMs || 0;
+  const rawMs = np.lastRawProgressMs != null ? np.lastRawProgressMs : -1;
+  const durMs = np.durationMs || 1;
+  const durFmt = formatTime(durMs);
 
-  let rawInfo = 'N/A';
-  let driftInfo = 'N/A';
-  if (np.lastRawProgressMs != null) {
-    const rawSec = (np.lastRawProgressMs / 1000).toFixed(1);
-    const now = Date.now();
-    const elapsed = np.lastPollTime ? (now - np.lastPollTime) : 0;
-    const stalled = elapsed > 1000 && elapsed > 0;
-    rawInfo = `${rawSec}s` + (stalled ? ' (\u274C estancada)' : '');
-    if (np.progressMs && np.lastRawProgressMs >= 0) {
-      const driftSec = ((np.progressMs - np.lastRawProgressMs) / 1000).toFixed(1);
-      driftInfo = `${driftSec}s`;
+  const now = Date.now();
+  const elapsedSincePoll = np.lastPollTime ? (now - np.lastPollTime) : 0;
+
+  // ── scheduler ──
+  const schedPct = Math.min(100, Math.round((schedMs / durMs) * 100));
+  const schedBarW = 14;
+  const schedBar = bar(schedMs, durMs, schedBarW, '\u25B0');
+  const schedStr = formatTime(schedMs) + ' / ' + durFmt;
+
+  // ── SMTC ──
+  const smtcActive = rawMs > 0;
+  const smtcStalled = elapsedSincePoll > 2000 && rawMs >= 0 && rawMs < 2000;
+  let smtcStatus, smtcIcon;
+  if (!smtcActive && smtcStalled) {
+    smtcStatus = '\u274C estancada';
+    smtcIcon = '\u274C';
+  } else if (smtcActive && elapsedSincePoll < 5000) {
+    smtcStatus = '\u2705 activa';
+    smtcIcon = '\u2705';
+  } else if (rawMs >= 0) {
+    smtcStatus = '\u26A0\uFE0F lenta';
+    smtcIcon = '\u26A0\uFE0F';
+  } else {
+    smtcStatus = 'N/A';
+    smtcIcon = '\u2753';
+  }
+  const smtcStr = rawMs >= 0 ? formatTime(rawMs) : 'N/A';
+
+  // ── drift ──
+  const driftMs = rawMs >= 0 ? (schedMs - rawMs) : 0;
+  const driftSec = (driftMs / 1000).toFixed(1);
+  let driftType;
+  if (rawMs < 0) {
+    driftType = 'SIN DATOS';
+  } else if (Math.abs(driftMs) < 2000) {
+    driftType = '\u2705 SINCRONIZADO';
+  } else if (driftMs > 0) {
+    driftType = '\u23ED\uFE0F ADELANTADO (scheduler > SMTC)';
+  } else {
+    driftType = '\u23EE\uFE0F ATRASADO (scheduler < SMTC)';
+  }
+
+  // ── gap bars ──
+  const gapW = 30;
+  const outerW = gapW + 16;
+  const rawBar = bar(rawMs >= 0 ? rawMs : 0, durMs, gapW, '\u25A0');
+  const schedGapBar = bar(schedMs, durMs, gapW, '\u25A0');
+  const driftDir = driftMs >= 0 ? '+' : '';
+  const diffBarW = 10;
+  const diffFilled = Math.min(diffBarW, Math.round((Math.abs(driftMs) / durMs) * diffBarW));
+  const diffBar = '\u25A0'.repeat(diffFilled) + '\u25B1'.repeat(diffBarW - diffFilled);
+
+  // ── letras ──
+  const lines = np.lyricLines || [];
+  const totalL = lines.length;
+  const idx = np.lyricIndex != null ? np.lyricIndex : -1;
+
+  // línea del scheduler
+  let schedLineText = 'N/A';
+  let schedNextText = 'N/A';
+  if (idx >= 0 && idx < lines.length) {
+    schedLineText = 'L' + (idx + 1) + '/' + totalL + ' \u2014 ' + escDiscord(lines[idx].text || '');
+    if (idx + 1 < lines.length) {
+      const rem = Math.max(0, (lines[idx + 1].timeMs - schedMs) / 1000);
+      schedNextText = 'L' + (idx + 2) + ' en ' + rem.toFixed(1) + 's \u2014 ' + escDiscord(lines[idx + 1].text || '');
+    } else {
+      schedNextText = '(final de la canci\u00F3n)';
+    }
+  } else if (totalL > 0) {
+    schedLineText = 'Esperando letra\u2026';
+    schedNextText = '\u2014';
+  }
+
+  // línea real estimada (corregida con desfase)
+  const realPosMs = rawMs >= 0 ? rawMs : schedMs;
+  const realResult = findLineAt(lines, realPosMs);
+  let realLineText = 'N/A (sin letras)';
+  let realNextText = '';
+  if (realResult && totalL > 0) {
+    const rIdx = realResult.index;
+    realLineText = 'L' + (rIdx + 1) + '/' + totalL + ' \u2014 ' + escDiscord(realResult.line.text || '');
+    if (rIdx + 1 < lines.length) {
+      const rem = Math.max(0, (lines[rIdx + 1].timeMs - realPosMs) / 1000);
+      realNextText = 'L' + (rIdx + 2) + ' en ' + rem.toFixed(1) + 's \u2014 ' + escDiscord(lines[rIdx + 1].text || '');
+    } else {
+      realNextText = '(final de la canci\u00F3n)';
     }
   }
 
-  const lines = np.lyricLines || [];
-  const idx = np.lyricIndex != null ? np.lyricIndex : -1;
-  const totalLines = lines.length;
+  // ── gap de líneas ──
+  const schedLineIdx = idx >= 0 ? idx + 1 : '?';
+  const realLineIdx = realResult ? realResult.index + 1 : '?';
+  const schedLineShort = idx >= 0 && idx < lines.length ? escDiscord((lines[idx].text || '').slice(0, 40)) : 'N/A';
+  const realLineShort = realResult ? escDiscord((realResult.line.text || '').slice(0, 40)) : 'N/A';
 
-  let currentLine = 'N/A';
-  let nextLine = 'N/A';
-  if (idx >= 0 && idx < lines.length) {
-    currentLine = 'L' + (idx + 1) + '/' + totalLines + ' \u2014 ' + (lines[idx].text || '');
-  } else if (totalLines > 0) {
-    currentLine = 'Esperando letra\u2026';
-  }
-  if (idx + 1 < lines.length) {
-    const remaining = Math.max(0, Math.round((lines[idx + 1].timeMs - np.progressMs) / 100) * 100 / 1000);
-    nextLine = 'L' + (idx + 2) + ' en ' + remaining.toFixed(1) + 's \u2014 ' + (lines[idx + 1].text || '');
-  } else if (totalLines > 0) {
-    nextLine = '(final de la canci\u00F3n)';
+  // ── precisión ──
+  const rawForPrecision = rawMs >= 0 ? rawMs : schedMs;
+  const precDrift = Math.abs(schedMs - rawForPrecision);
+  const precVal = Math.max(0, Math.min(100, Math.round(100 - (precDrift / 1000) * 4)));
+  const precBar = '\u25A0'.repeat(Math.round(precVal / 10)) + '\u25B1'.repeat(Math.max(0, 10 - Math.round(precVal / 10)));
+
+  // ── recomendación ──
+  let reco;
+  const absDriftSec = Math.abs(driftMs) / 1000;
+  if (rawMs < 0) {
+    reco = 'No hay datos de SMTC. Revisa que Spotify est\u00E9 reproduciendo.';
+  } else if (rawMs < 2000 && schedMs > 5000) {
+    reco = 'SMTC estancado en 0. Usa `!resync <segundos>` con la posici\u00F3n aproximada para forzar.';
+  } else if (absDriftSec < 2) {
+    reco = 'Todo OK, leve drift normal.';
+  } else if (absDriftSec < 5) {
+    reco = 'Desfase leve. Usa `!offset ' + (driftMs > 0 ? '-' : '+') + Math.round(absDriftSec * 1000) + 'ms` para ajustar.';
+  } else {
+    reco = 'Desfase grande. Usa `!resync ' + Math.round(schedMs / 1000) + '` o `!restart` para recalibrar.';
   }
 
+  // ── construir embed ──
   const desc = [
-    '**' + np.trackName + '** \u2014 ' + np.artistName,
-    'Duraci\u00F3n: ' + formatTime(np.durationMs),
+    '═══════════════════════════════════════',
+    '\uD83D\uDD27 DIAGN\u00D3STICO DE SINCRONIZACI\u00D3N',
+    '═══════════════════════════════════════',
     '',
-    '\u2014\u2014 POSICI\u00D3N \u2014\u2014',
-    'Scheduler:  ' + progressSec + 's / ' + durationSec + 's  (' + pct + '%)  \u2190\u2011' + bar,
-    'SMTC crudo: ' + rawInfo,
-    'Desfase estimado: ' + driftInfo,
+    '\uD83D\uDCC0 CANCI\u00D3N:',
+    np.artistName + ' \u2014 **' + np.trackName + '**',
+    'Duraci\u00F3n: ' + durFmt,
+    '',
+    '\u2500' .repeat(45),
+    '',
+    '\u23F1\uFE0F TIEMPOS CRUDOS (fuentes reales):',
+    '',
+    '  Fuente          | Posici\u00F3n     | Estado',
+    '  ' + '\u2500'.repeat(16) + '\u253C' + '\u2500'.repeat(14) + '\u253C' + '\u2500'.repeat(7),
+    '  Scheduler       | ' + schedStr.padEnd(13) + '| ' + bar(schedMs, durMs, 8, '\u25B0'),
+    '  SMTC (Spotify)  | ' + smtcStr.padEnd(13) + '| ' + smtcStatus,
+    '  ' + '\u2500'.repeat(16) + '\u2534' + '\u2500'.repeat(14) + '\u2534' + '\u2500'.repeat(7),
+    '',
+    '\u2500' .repeat(45),
+    '',
+    '\uD83D\uDCD0 DESFASE ANALIZADO:',
+    '',
+    '  Tipo: ' + driftType,
+    '',
+    '  Scheduler vs SMTC: ' + (driftMs >= 0 ? '+' : '') + driftSec + 's',
+    '',
+    '  \u250C' + '\u2500'.repeat(outerW) + '\u2510',
+    '  \u2502 SMTC real:    ' + rawBar + ' \u2502',
+    '  \u2502 Scheduler:     ' + schedGapBar + ' \u2502  \u2190 gap',
+    '  \u2502' + ' '.repeat(outerW) + '\u2502',
+    '  \u2502 Diferencia:   ' + diffBar.padEnd(gapW) + ' \u2502  = ' + (driftMs >= 0 ? '+' : '') + driftSec + 's',
+    '  \u2514' + '\u2500'.repeat(outerW) + '\u2518',
+    '',
+    '\u2500' .repeat(45),
+    '',
+    '\uD83C\uDFA4 LETRA SEG\u00DAN SCHEDULER (lo que \u00E9L cree):',
+    '',
+    '  L\u00EDnea actual:  ' + schedLineText,
+    '  Siguiente:     ' + schedNextText,
+    '',
+    (rawMs < 2000 && schedMs > 5000 ? '  \u26A0\uFE0F ADVERTENCIA: SMTC estancado, la letra "real" abajo NO es precisa.\n' : ''),
+    '\uD83C\uDFAF LETRA REAL ESTIMADA (corregida con desfase):',
+    '',
+    '  Si aplicamos el desfase de ' + driftSec + 's:',
+    '',
+    '  L\u00EDnea real ahora:     ' + realLineText,
+    '  Siguiente real:       ' + realNextText,
+    '',
+    '  \uD83D\uDCCD El scheduler va por L' + schedLineIdx + ', pero SMTC marca L' + realLineIdx,
+    '',
+    '\u2500' .repeat(45),
+    '',
+    '\uD83D\uDCCA RESUMEN DEL GAP:',
+    '',
+    '  \u250C' + '\u2500'.repeat(outerW) + '\u2510',
+    '  \u2502 Scheduler dice:  "' + (schedLineShort.length > outerW - 23 ? schedLineShort.slice(0, outerW - 26) + '...' : schedLineShort).padEnd(outerW - 3) + ' \u2502',
+    '  \u2502     \u2191' + ' '.repeat(outerW - 9) + '\u2502',
+    '  \u2502     \u2502  desfase de ' + (driftMs >= 0 ? '+' : '') + driftSec + 's' + ' '.repeat(outerW - 21 - driftSec.length) + ' \u2502',
+    '  \u2502     \u2193' + ' '.repeat(outerW - 9) + '\u2502',
+    '  \u2502 SMTC dice:     "' + (realLineShort.length > outerW - 23 ? realLineShort.slice(0, outerW - 26) + '...' : realLineShort).padEnd(outerW - 3) + ' \u2502',
+    '  \u2514' + '\u2500'.repeat(outerW) + '\u2518',
+    '',
+    '  Precisi\u00F3n: ' + precBar + ' ' + precVal + '%' + (precVal >= 80 ? ' \u2705' : precVal >= 50 ? ' \u26A0\uFE0F' : ' \u274C'),
+    '',
+    '\u2500' .repeat(45),
+    '',
+    '\uD83D\uDCA1 ACCI\u00D3N RECOMENDADA:',
+    '',
+    '  ' + reco,
+    '',
+    '═══════════════════════════════════════',
   ];
-
-  if (totalLines > 0) {
-    desc.push(
-      '',
-      '\u2014\u2014 LETRA ACTUAL \u2014\u2014',
-      currentLine,
-      '',
-      '\u2014\u2014 SIGUIENTE L\u00CDNEA \u2014\u2014',
-      nextLine,
-    );
-  }
 
   return new EmbedBuilder()
     .setColor(themeColor)

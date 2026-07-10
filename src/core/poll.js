@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { getCurrentTrack } from '../spotify/index.js';
 import { getLyrics } from '../lyrics.js';
@@ -13,6 +13,7 @@ import { showTrackInfo, showProgress, showCompact, onLineChange, resetBroadcastD
 import { resetProgressTracking } from '../spotify/progress.js';
 
 const NOWPLAYING_FILE = join(CONFIG_DIR, 'nowplaying.json');
+const RESYNC_FILE = join(CONFIG_DIR, 'resync.json');
 
 let currentTrackId = null;
 let currentTrackName = '';
@@ -237,6 +238,18 @@ async function poll() {
             console.log(`[Principal] Posición SMTC estancada (Δ${rawPosDelta}ms en ${elapsed}ms)`);
             lastLoggedRawDelta = rawPosDelta;
           }
+          // Even when stalled, if raw SMTC position changed significantly, resync
+          if (rawPos !== lastRawProgressMs && scheduler) {
+            const restartMs = Math.max(0, track.progressMs + getLyricOffset());
+            const currentPos = scheduler.estimatedProgressMs;
+            if (Math.abs(restartMs - currentPos) > 2000) {
+              console.log(
+                `[Principal] Resincronizando (SMTC actualizado): prog=${Math.round(track.progressMs)}ms sched=${Math.round(currentPos)}ms`
+              );
+              scheduler.restart(restartMs);
+              saveNowplaying();
+            }
+          }
         } else {
           const restartMs = Math.max(0, track.progressMs + getLyricOffset());
           const currentPos = scheduler.estimatedProgressMs;
@@ -254,6 +267,26 @@ async function poll() {
     lastRawProgressMs = track.rawProgressMs ?? track.progressMs;
 
     if (currentTrackId) {
+      try {
+        if (existsSync(RESYNC_FILE)) {
+          const resync = JSON.parse(readFileSync(RESYNC_FILE, 'utf8'));
+          unlinkSync(RESYNC_FILE);
+          if (resync.positionMs != null && scheduler) {
+            const adjustedMs = Math.max(0, resync.positionMs + getLyricOffset());
+            console.log(`[Resync] Posición forzada a ${resync.positionMs}ms (${(resync.positionMs / 1000).toFixed(1)}s)`);
+            scheduler.restart(adjustedMs);
+            saveNowplaying();
+          } else if (resync.force && scheduler) {
+            const restartMs = Math.max(0, track.progressMs + getLyricOffset());
+            console.log(`[Resync] Forzado desde backend: ${Math.round(track.progressMs)}ms`);
+            scheduler.restart(restartMs);
+            saveNowplaying();
+          }
+        }
+      } catch (err) {
+        console.error('[Resync] Error procesando:', err.message);
+      }
+
       const pMs = scheduler ? scheduler.estimatedProgressMs : lastProgressMs;
       if (displayMode === 'progress') {
         showProgress(pMs, currentDurationMs, 'progress');
