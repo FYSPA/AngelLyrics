@@ -847,7 +847,7 @@ export function debugReport(np) {
   const absDrift = driftMs != null ? Math.abs(driftMs) / 1000 : null;
 
   // smtc state
-  const smtcMuerto = rawMs >= 0 && rawMs < 500 && elapsedSincePoll > 3000 && schedMs > 3000;
+  const smtcMuerto = rawMs >= 0 && rawMs < 500 && schedMs > 5000;
   const smtcVivo = rawMs > 2000 && elapsedSincePoll < 5000;
   const smtcLento = rawMs > 0 && !smtcMuerto && !smtcVivo;
 
