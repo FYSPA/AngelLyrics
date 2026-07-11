@@ -204,7 +204,7 @@ export function helpEmbed() {
       },
       {
         name: 'Configuraci\u00F3n',
-        value: '`!mode` / `!backend` / `!ui` / `!prefix` / `!emoji` / `!style` / `!cooldown` / `!filter` / `!blacklist` / `!format` / `!format override` / `!offset` / `!resync` / `!broadcast` / `!np channel`',
+        value: '`!mode` / `!backend` / `!ui` / `!prefix` / `!emoji` / `!style` / `!cooldown` / `!filter` / `!blacklist` / `!format` / `!format override` / `!offset` / `!resync` / `!nudge` / `!broadcast` / `!np channel`',
         inline: false,
       },
       {
@@ -867,6 +867,9 @@ export function debugReport(np) {
   L('FUENTES DE TIEMPO:');
   L('  Scheduler: ' + schedFmt + ' \u2014 reloj interno del bot');
   L('  SMTC (Spotify): ' + rawFmt + ' \u2014 ' + (rawMs >= 0 ? 'lo que Windows lee de Spotify' : 'no disponible'));
+  if (np.sourceApp) {
+    L('  App: ' + np.sourceApp + (np.sourceApp.toLowerCase().includes('spotify') ? '' : ' (navegador/otro)'));
+  }
   L('');
 
   // ═══════════ SMTC analysis ═══════════

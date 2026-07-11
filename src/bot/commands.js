@@ -431,9 +431,19 @@ async function handleResync(interaction) {
   const np = readNowplaying();
   if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
 
-  const secs = interaction.options.getNumber('seconds');
+  const secs = interaction.options.getNumber('seconds') ?? interaction.options.getNumber('segundos');
+  const timeStr = interaction.options.getString('time') ?? interaction.options.getString('tiempo');
   try {
-    if (secs != null) {
+    if (timeStr) {
+      const parts = timeStr.split(':');
+      const totalSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      writeFileSync(RESYNC_FILE, JSON.stringify({ positionMs: totalSecs * 1000 }), 'utf8');
+      await interaction.reply({ embeds: [new EmbedBuilder()
+        .setColor(COLORS.GREEN)
+        .setTitle('Resincronización solicitada')
+        .setDescription('El scheduler se reajustará a **' + timeStr + '** en el próximo ciclo (~1.5s).')
+      ]});
+    } else if (secs != null) {
       writeFileSync(RESYNC_FILE, JSON.stringify({ positionMs: Math.round(secs * 1000) }), 'utf8');
       const m = Math.floor(secs / 60);
       const s = Math.round(secs) % 60;
@@ -444,13 +454,33 @@ async function handleResync(interaction) {
         .setDescription('El scheduler se reajustará a **' + newPos + '** en el próximo ciclo (~1.5s).')
       ]});
     } else {
-      writeFileSync(RESYNC_FILE, JSON.stringify({ force: true }), 'utf8');
+      writeFileSync(RESYNC_FILE, JSON.stringify({ capture: true }), 'utf8');
       await interaction.reply({ embeds: [new EmbedBuilder()
-        .setColor(COLORS.GREEN)
-        .setTitle('Resincronización solicitada')
-        .setDescription('El scheduler se reajustará a la posición actual del backend en el próximo ciclo (~1.5s).')
+        .setColor(COLORS.ORANGE)
+        .setTitle('Modo captura activado')
+        .setDescription('Pausá y reproducí la canción. El bot capturará la posición automáticamente cuando SMTC la reporte.')
       ]});
     }
+  } catch (err) {
+    await interaction.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
+  }
+}
+
+async function handleNudge(interaction) {
+  const np = readNowplaying();
+  if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
+
+  const secs = interaction.options.getNumber('seconds') ?? interaction.options.getNumber('segundos');
+  if (secs == null) return interaction.reply({ embeds: [errorEmbed('Especificá los segundos (ej: /nudge 5 o /nudge -3)')] });
+
+  const deltaMs = Math.round(secs * 1000);
+  try {
+    writeFileSync(RESYNC_FILE, JSON.stringify({ relativeMs: deltaMs }), 'utf8');
+    await interaction.reply({ embeds: [new EmbedBuilder()
+      .setColor(COLORS.GREEN)
+      .setTitle('Ajuste aplicado')
+      .setDescription(`Scheduler ${deltaMs >= 0 ? 'adelantado' : 'atrasado'} **${deltaMs >= 0 ? '+' : ''}${secs}s**.`)
+    ]});
   } catch (err) {
     await interaction.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
   }
@@ -485,6 +515,7 @@ const HANDLERS = {
   diagnostico: handleDiagnostico, diagnostic: handleDiagnostico,
   debug: handleDebug,
   resync: handleResync, resincronizar: handleResync,
+  nudge: handleNudge, ajustar: handleNudge,
 };
 
 function b(name, desc, fn) {
@@ -721,13 +752,31 @@ export const COMMANDS = [
   b('diagnostico', 'Ver diagnóstico de sincronización de la canción actual', function (c) { return c; }),
   b('diagnostic', 'View sync diagnostic for current track', function (c) { return c; }),
   b('resync', 'Force resync scheduler position', function (c) {
-    return c.addNumberOption(function (o) {
-      return o.setName('seconds').setDescription('Position in seconds (optional)').setRequired(false);
-    });
+    return c
+      .addNumberOption(function (o) {
+        return o.setName('seconds').setDescription('Position in seconds (optional)').setRequired(false);
+      })
+      .addStringOption(function (o) {
+        return o.setName('time').setDescription('Position as mm:ss (optional, e.g. 1:24)').setRequired(false);
+      });
   }),
   b('resincronizar', 'Forzar resincronización del scheduler', function (c) {
+    return c
+      .addNumberOption(function (o) {
+        return o.setName('segundos').setDescription('Posición en segundos (opcional)').setRequired(false);
+      })
+      .addStringOption(function (o) {
+        return o.setName('tiempo').setDescription('Posición como mm:ss (opcional, ej: 1:24)').setRequired(false);
+      });
+  }),
+  b('nudge', 'Adjust scheduler position forward/backward', function (c) {
     return c.addNumberOption(function (o) {
-      return o.setName('segundos').setDescription('Posición en segundos (opcional)').setRequired(false);
+      return o.setName('seconds').setDescription('Seconds to adjust (negative = backward)').setRequired(true);
+    });
+  }),
+  b('ajustar', 'Ajustar posición del scheduler adelante/atrás', function (c) {
+    return c.addNumberOption(function (o) {
+      return o.setName('segundos').setDescription('Segundos a ajustar (negativo = atrás)').setRequired(true);
     });
   }),
   b('debug', 'Show compact sync debug info', function (c) { return c; }),

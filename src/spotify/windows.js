@@ -57,6 +57,7 @@ export async function getCurrentTrackWindows() {
         durationMs: Math.max(0, data.durationMs || 0),
         albumArtUrl,
         rawProgressMs: data.positionMs,
+        sourceApp: data.sourceApp || '',
       };
     } catch (err) {
       console.warn('[Windows] Error parseando salida SMTC:', err.message);

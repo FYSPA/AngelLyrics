@@ -37,6 +37,9 @@ let _schedulerDeferred = false;
 let _deferredSince = 0;
 let _smtcWasDead = false;
 let _smtcWasDeadSince = 0;
+let _captureMode = false;
+let _captureSince = 0;
+let currentSourceApp = '';
 
 function saveNowplaying() {
   try {
@@ -55,6 +58,7 @@ function saveNowplaying() {
       lyricLine: currentLyricLine,
       lyricLines: currentLyricLines,
       lyricIndex: currentLyricIndex,
+      sourceApp: currentSourceApp,
     };
     writeFileSync(NOWPLAYING_FILE, JSON.stringify(data), 'utf8');
   } catch (err) {
@@ -178,6 +182,7 @@ async function poll() {
 
       if (scheduler) { scheduler.stop(); scheduler = null; }
       _smtcWasDead = false;
+      currentSourceApp = track.sourceApp || '';
 
       addRecentTrack({ trackName: track.trackName, artistName: track.artistName, albumName: track.albumName });
       addTrackPlay(track.trackId || 'unknown', track.trackName, track.artistName, track.durationMs);
@@ -264,6 +269,19 @@ async function poll() {
           }
         }
 
+        if (_captureMode) {
+          if (rawPos >= 1000) {
+            _captureMode = false;
+            const restartMs = Math.max(0, track.progressMs + getLyricOffset());
+            console.log(`[Principal] Captura: SMTC=${rawPos}ms, scheduler reajustado a ${Math.round(restartMs)}ms`);
+            scheduler.restart(restartMs);
+            saveNowplaying();
+          } else if (nowMs - _captureSince > 30000) {
+            _captureMode = false;
+            console.log('[Principal] Captura expiró tras 30s sin SMTC válido');
+          }
+        }
+
         const elapsed = nowMs - lastPollTime;
         const expectedProgress = lastProgressMs + elapsed;
         const drift = Math.abs(track.progressMs - expectedProgress);
@@ -313,11 +331,21 @@ async function poll() {
             console.log(`[Resync] Posición forzada a ${resync.positionMs}ms (${(resync.positionMs / 1000).toFixed(1)}s)`);
             scheduler.restart(adjustedMs);
             saveNowplaying();
+          } else if (resync.relativeMs != null && scheduler) {
+            const currentPos = scheduler.estimatedProgressMs;
+            const adjustedMs = Math.max(0, currentPos + resync.relativeMs + getLyricOffset());
+            console.log(`[Resync] Ajuste relativo: ${resync.relativeMs >= 0 ? '+' : ''}${resync.relativeMs}ms → ${Math.round(adjustedMs / 1000)}s`);
+            scheduler.restart(adjustedMs);
+            saveNowplaying();
           } else if (resync.force && scheduler) {
             const restartMs = Math.max(0, track.progressMs + getLyricOffset());
             console.log(`[Resync] Forzado desde backend: ${Math.round(track.progressMs)}ms`);
             scheduler.restart(restartMs);
             saveNowplaying();
+          } else if (resync.capture) {
+            _captureMode = true;
+            _captureSince = Date.now();
+            console.log('[Resync] Modo captura activado');
           }
         }
       } catch (err) {
@@ -379,6 +407,7 @@ export function getTrackInfo() {
     progressMs: scheduler ? scheduler.estimatedProgressMs : lastProgressMs,
     lastRawProgressMs,
     lastPollTime,
+    sourceApp: currentSourceApp,
   };
 }
 

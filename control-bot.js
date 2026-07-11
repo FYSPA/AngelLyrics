@@ -426,16 +426,59 @@ client.on('messageCreate', async (msg) => {
     if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
 
     const secArg = args[1];
-    if (secArg) {
+    if (!secArg || secArg === 'capture') {
+      try {
+        writeFileSync(RESYNC_FILE, JSON.stringify({ capture: true }), 'utf8');
+        msg.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(COLORS.ORANGE)
+            .setTitle('Modo captura activado')
+            .setDescription('Pausá y reproducí la canción. El bot capturará la posición automáticamente cuando SMTC la reporte.\n\nTambién podés usar `!resync <segundos>` para fijar una posición exacta.')
+          ],
+        });
+      } catch (err) {
+        msg.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
+      }
+    } else if (/^[+-]\d+(\.\d+)?$/.test(secArg)) {
+      const deltaSecs = parseFloat(secArg);
+      const deltaMs = Math.round(deltaSecs * 1000);
+      try {
+        writeFileSync(RESYNC_FILE, JSON.stringify({ relativeMs: deltaMs }), 'utf8');
+        const sign = deltaMs >= 0 ? '+' : '';
+        msg.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(COLORS.GREEN)
+            .setTitle('Ajuste relativo solicitado')
+            .setDescription(`El scheduler se ${deltaMs >= 0 ? 'adelantará' : 'atrasará'} **${sign}${deltaSecs}s** en el próximo ciclo (~1.5s).`)
+          ],
+        });
+      } catch (err) {
+        msg.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
+      }
+    } else if (/^\d+:\d{2}$/.test(secArg)) {
+      const parts = secArg.split(':');
+      const secs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      try {
+        writeFileSync(RESYNC_FILE, JSON.stringify({ positionMs: secs * 1000 }), 'utf8');
+        msg.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(COLORS.GREEN)
+            .setTitle('Resincronización solicitada')
+            .setDescription('El scheduler se reajustará a **' + secArg + '** en el próximo ciclo (~1.5s).')
+          ],
+        });
+      } catch (err) {
+        msg.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
+      }
+    } else {
       const secs = parseFloat(secArg);
       if (isNaN(secs) || secs < 0) {
-        return msg.reply({ embeds: [errorEmbed('La posición debe ser un número en segundos (ej: !resync 24)')] });
+        return msg.reply({ embeds: [errorEmbed('Formato inválido. Usá:\n- `!resync 84` (segundos)\n- `!resync 1:24` (mm:ss)\n- `!resync +5` (adelantar)\n- `!resync -3` (atrasar)\n- `!resync capture` (capturar al pausar/reproducir)')] });
       }
       try {
         writeFileSync(RESYNC_FILE, JSON.stringify({ positionMs: Math.round(secs * 1000) }), 'utf8');
-        const totalSec = Math.round(secs);
-        const m = Math.floor(totalSec / 60);
-        const s = totalSec % 60;
+        const m = Math.floor(secs / 60);
+        const s = Math.round(secs) % 60;
         const newPos = m + ':' + String(s).padStart(2, '0');
         msg.reply({
           embeds: [new EmbedBuilder()
@@ -447,19 +490,31 @@ client.on('messageCreate', async (msg) => {
       } catch (err) {
         msg.reply({ embeds: [errorEmbed('Error escribiendo archivo de resync: ' + err.message)] });
       }
-    } else {
-      try {
-        writeFileSync(RESYNC_FILE, JSON.stringify({ force: true }), 'utf8');
-        msg.reply({
-          embeds: [new EmbedBuilder()
-            .setColor(COLORS.GREEN)
-            .setTitle('Resincronización solicitada')
-            .setDescription('El scheduler se reajustará a la posición actual del backend en el próximo ciclo (~1.5s).')
-          ],
-        });
-      } catch (err) {
-        msg.reply({ embeds: [errorEmbed('Error escribiendo archivo de resync: ' + err.message)] });
-      }
+    }
+  }
+
+  else if (command === '!nudge' || command === '!ajustar') {
+    const np = readNowplaying();
+    if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
+
+    const deltaArg = args[1];
+    if (!deltaArg || !/^[+-]?\d+(\.\d+)?$/.test(deltaArg)) {
+      return msg.reply({ embeds: [errorEmbed('Usá `!nudge +5` para adelantar 5s o `!nudge -3` para atrasar 3s.')] });
+    }
+    const deltaSecs = parseFloat(deltaArg);
+    const deltaMs = Math.round(deltaSecs * 1000);
+    try {
+      writeFileSync(RESYNC_FILE, JSON.stringify({ relativeMs: deltaMs }), 'utf8');
+      const sign = deltaMs >= 0 ? '+' : '';
+      msg.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(COLORS.GREEN)
+          .setTitle('Ajuste aplicado')
+          .setDescription(`Scheduler ${deltaMs >= 0 ? 'adelantado' : 'atrasado'} **${sign}${deltaSecs}s**.`)
+        ],
+      });
+    } catch (err) {
+      msg.reply({ embeds: [errorEmbed('Error: ' + err.message)] });
     }
   }
 
