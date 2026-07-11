@@ -991,6 +991,30 @@ export function debugReport(np) {
   return out.join('\n');
 }
 
+// ── SMTC Raw ──────────────────────────────────────────────────────────────────
+
+export function smtcRawEmbed(np) {
+  const rawMs = np.lastRawProgressMs != null ? np.lastRawProgressMs : -1;
+  const schedMs = np.progressMs || 0;
+  const durMs = np.durationMs || 1;
+  const rawFmt = rawMs >= 0 ? formatTime(rawMs) : '--:--';
+  const schedFmt = formatTime(schedMs);
+  const durFmt2 = formatTime(durMs);
+  const app = np.sourceApp || 'N/A';
+  const isBrowser = app !== 'N/A' && !app.toLowerCase().includes('spotify');
+
+  return new EmbedBuilder()
+    .setColor(COLORS.GREY)
+    .setTitle('SMTC RAW DATA')
+    .setDescription('```\n' +
+      'Source App:      ' + app + (isBrowser ? ' (navegador)' : '') + '\n' +
+      'Raw Position:    ' + (rawMs >= 0 ? rawMs.toLocaleString() + 'ms (' + rawFmt + ')' : 'N/A') + '\n' +
+      'Scheduler:       ' + schedMs.toLocaleString() + 'ms (' + schedFmt + ')' + '\n' +
+      'Duration:        ' + durMs.toLocaleString() + 'ms (' + durFmt2 + ')' + '\n' +
+      '```')
+    .setFooter({ text: escDiscord(np.trackName + ' \u2014 ' + np.artistName) });
+}
+
 // ── Ping ─────────────────────────────────────────────────────────────────────
 
 export function pingEmbed() {

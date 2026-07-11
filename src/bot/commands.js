@@ -23,7 +23,7 @@ import {
   logsEmbed, pingEmbed, pingResultEmbed,
   themeInfoEmbed, themeChangedEmbed,
   statsEmbed, statsResetEmbed,
-  diagnosticEmbed, debugReport,
+  diagnosticEmbed, debugReport, smtcRawEmbed,
 } from './ui.js';
 import {
   getDisplayMode, setDisplayMode,
@@ -427,6 +427,12 @@ async function handleDebug(interaction) {
   await interaction.reply({ content: debugReport(np) });
 }
 
+async function handleSmtc(interaction) {
+  const np = readNowplaying();
+  if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
+  await interaction.reply({ embeds: [smtcRawEmbed(np)] });
+}
+
 async function handleResync(interaction) {
   const np = readNowplaying();
   if (!np || !np.trackName) return interaction.reply({ embeds: [noMusicEmbed()] });
@@ -514,6 +520,7 @@ const HANDLERS = {
   stats: handleStats, estadisticas: handleStats,
   diagnostico: handleDiagnostico, diagnostic: handleDiagnostico,
   debug: handleDebug,
+  smtc: handleSmtc,
   resync: handleResync, resincronizar: handleResync,
   nudge: handleNudge, ajustar: handleNudge,
 };
@@ -780,6 +787,7 @@ export const COMMANDS = [
     });
   }),
   b('debug', 'Show compact sync debug info', function (c) { return c; }),
+  b('smtc', 'Show raw SMTC data (source, position, duration)', function (c) { return c; }),
 ];
 
 export async function executeSlashCommand(interaction, client) {

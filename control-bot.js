@@ -26,7 +26,7 @@ import {
   themeInfoEmbed, themeChangedEmbed, themeRow,
   formatOverrideAddedEmbed, formatOverrideRemovedEmbed, formatOverrideListEmbed,
   statsEmbed, statsResetEmbed,
-  diagnosticEmbed, debugReport,
+  diagnosticEmbed, debugReport, smtcRawEmbed,
 } from './src/bot/ui.js';
 import { startLiveUpdates, stopLiveUpdates } from './src/bot/live.js';
 import { startKaraoke, stopKaraoke, isKaraokeActive } from './src/bot/lyrics-live.js';
@@ -413,6 +413,12 @@ client.on('messageCreate', async (msg) => {
     const np = readNowplaying();
     if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
     msg.reply({ content: debugReport(np) });
+  }
+
+  else if (command === '!smtc') {
+    const np = readNowplaying();
+    if (!np || !np.trackName) return msg.reply({ embeds: [noMusicEmbed()] });
+    msg.reply({ embeds: [smtcRawEmbed(np)] });
   }
 
   else if (command === '!diagnostico') {
